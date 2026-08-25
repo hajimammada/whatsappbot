@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let currentProfile = {};
   let totalMessagesCount = 0;
+  let chatStatuses = {}; // phone -> { isPaused, remainingMinutes }
 
   // 1. Initialize Server-Sent Events (SSE)
   function initSSE() {
@@ -76,7 +77,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function handleEvent(type, data) {
     if (type === 'status_change') {
+      if (data.chatStatuses) chatStatuses = data.chatStatuses;
       updateConnectionStatus(data);
+    } else if (type === 'chat_status_updated') {
+      chatStatuses[data.phone] = data;
+      loadLeads(); // re-render table with updated status
     } else if (type === 'qr_generated') {
       renderQR(data.qrCodeDataUrl);
     } else if (type === 'new_message') {
@@ -298,8 +303,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // 4. Leads Management
   async function loadLeads() {
     try {
-      const res = await fetch('/api/leads');
-      const leads = await res.json();
+      const [leadsRes, statusRes] = await Promise.all([
+        fetch('/api/leads'),
+        fetch('/api/chat-statuses')
+      ]);
+      const leads = await leadsRes.json();
+      chatStatuses = await statusRes.json();
       renderLeadsTable(leads);
     } catch (err) {
       console.error('Error fetching leads:', err);
@@ -319,7 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
     statViewingsCount.textContent = viewingsCount;
 
     if (!leads || leads.length === 0) {
-      leadsTbody.innerHTML = `<tr><td colspan="7" class="text-center" style="padding: 24px; color: var(--text-muted)">Hələ qeydə alınmış alıcı yoxdur. WhatsApp-da ilk sual daxil olduqda burada görünəcək.</td></tr>`;
+      leadsTbody.innerHTML = `<tr><td colspan="8" class="text-center" style="padding: 24px; color: var(--text-muted)">Hələ qeydə alınmış alıcı yoxdur. WhatsApp-da ilk sual daxil olduqda burada görünəcək.</td></tr>`;
       return;
     }
 
@@ -328,6 +337,20 @@ document.addEventListener('DOMContentLoaded', () => {
       const isViewing = l.status === 'viewing_requested';
       const aptTime = (l.viewingAppointments && l.viewingAppointments[0]?.preferred_time) || '-';
       const dateFormatted = new Date(l.lastContact).toLocaleString('az-AZ', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+      const chatStatus = chatStatuses[l.phoneNumber];
+      const isPaused = chatStatus && chatStatus.isPaused;
+      const remainingMins = chatStatus?.remainingMinutes || 15;
+
+      const botControlHtml = isPaused
+        ? `<div class="bot-control-cell">
+             <span class="badge-lead badge-paused" title="Siz müdaxilə etdiyiniz üçün bot dayanıb">⏸️ Dayandırılıb (${remainingMins} dəq)</span>
+             <button class="btn btn-primary btn-xs btn-resume-bot" data-phone="${l.phoneNumber}">▶️ Botu Aktivləşdir</button>
+           </div>`
+        : `<div class="bot-control-cell">
+             <span class="badge-lead badge-bot-active">🟢 Aktivdir</span>
+             <button class="btn btn-secondary btn-xs btn-pause-bot" data-phone="${l.phoneNumber}">⏸️ Dayandır</button>
+           </div>`;
 
       return `
         <tr>
@@ -346,16 +369,48 @@ document.addEventListener('DOMContentLoaded', () => {
             </span>
           </td>
           <td><strong>${escapeHtml(aptTime)}</strong></td>
-          <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <td>${botControlHtml}</td>
+          <td style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
             "${escapeHtml(l.lastMessage || '')}"
           </td>
           <td style="font-size: 11px; color: var(--text-muted);">${dateFormatted}</td>
           <td>
-            <a href="https://wa.me/${l.phoneNumber}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration: none;">💬 WhatsApp-da Aç</a>
+            <a href="https://wa.me/${l.phoneNumber}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration: none;">💬 WhatsApp</a>
           </td>
         </tr>
       `;
     }).join('');
+
+    // Attach click handlers to Resume & Pause buttons
+    document.querySelectorAll('.btn-resume-bot').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const phone = btn.getAttribute('data-phone');
+        btn.textContent = '...';
+        try {
+          await fetch(`/api/chat/${phone}/resume`, { method: 'POST' });
+          await loadLeads();
+        } catch (e) {
+          console.error(e);
+        }
+      });
+    });
+
+    document.querySelectorAll('.btn-pause-bot').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const phone = btn.getAttribute('data-phone');
+        btn.textContent = '...';
+        try {
+          await fetch(`/api/chat/${phone}/pause`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ minutes: 15 })
+          });
+          await loadLeads();
+        } catch (e) {
+          console.error(e);
+        }
+      });
+    });
   }
 
   btnRefreshLeads.addEventListener('click', loadLeads);

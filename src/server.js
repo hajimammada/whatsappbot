@@ -63,6 +63,22 @@ function createServer() {
     res.json({ success: true, autoReplyEnabled: waClient.autoReplyEnabled });
   });
 
+  // Per-Chat Human Takeover & Resume endpoints
+  app.get('/api/chat-statuses', (req, res) => {
+    res.json(waClient.getAllChatStatuses());
+  });
+
+  app.post('/api/chat/:phone/resume', (req, res) => {
+    const result = waClient.resumeBotForChat(req.params.phone);
+    res.json(result);
+  });
+
+  app.post('/api/chat/:phone/pause', (req, res) => {
+    const minutes = req.body.minutes || 15;
+    const result = waClient.pauseBotForChat(req.params.phone, minutes);
+    res.json(result);
+  });
+
   // Reconnect / Logout
   app.post('/api/whatsapp/reconnect', async (req, res) => {
     try {

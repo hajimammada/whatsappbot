@@ -639,6 +639,51 @@ input:checked + .slider:before {
   border: 1px solid rgba(37, 211, 102, 0.4);
 }
 
+.badge-paused {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.badge-bot-active {
+  background: rgba(37, 211, 102, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(37, 211, 102, 0.3);
+}
+
+.bot-control-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.btn-xs {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+}
+
+.btn-success {
+  background: #25d366;
+  color: #052e16;
+  font-weight: 700;
+}
+
+.btn-success:hover {
+  background: #1ebd5a;
+}
+
+.btn-warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.btn-warning:hover {
+  background: rgba(245, 158, 11, 0.4);
+}
+
 /* Simulator */
 .simulator-quick-buttons {
   display: flex;

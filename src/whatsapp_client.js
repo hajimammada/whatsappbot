@@ -5,7 +5,7 @@ const QRCode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
 
-const { generateAIResponse } = require('./ai_engine');
+const { generateAIResponse, getAgentSettings } = require('./ai_engine');
 const { recordLead } = require('./lead_manager');
 
 const AUTH_DIR = path.join(__dirname, '..', 'auth_info_baileys');
@@ -20,6 +20,7 @@ class WhatsAppClient {
     this.autoReplyEnabled = process.env.AUTO_REPLY_ENABLED !== 'false';
     this.recentMessages = [];
     this.cooldowns = new Map(); // sender -> timestamp
+    this.humanTakeovers = new Map(); // remoteJid -> timestamp
     this.eventListeners = [];
   }
 
@@ -42,12 +43,61 @@ class WhatsAppClient {
     this.notifySubscribers('settings_updated', { autoReplyEnabled: this.autoReplyEnabled });
   }
 
+  resumeBotForChat(phoneOrJid) {
+    const jid = phoneOrJid.includes('@') ? phoneOrJid : `${phoneOrJid}@s.whatsapp.net`;
+    this.humanTakeovers.delete(jid);
+    const phone = phoneOrJid.replace(/@.+/, '');
+    console.log(`🤖 +${phone} üçün bot panel üzərindən dərhal yenidən aktiv edildi.`);
+    this.notifySubscribers('chat_status_updated', {
+      phone: phone,
+      isPaused: false,
+      remainingMinutes: 0
+    });
+    return { success: true, phone, isPaused: false };
+  }
+
+  pauseBotForChat(phoneOrJid, minutes = 15) {
+    const jid = phoneOrJid.includes('@') ? phoneOrJid : `${phoneOrJid}@s.whatsapp.net`;
+    this.humanTakeovers.set(jid, Date.now());
+    const phone = phoneOrJid.replace(/@.+/, '');
+    console.log(`⏸️ +${phone} üçün bot panel üzərindən ${minutes} dəqiqəlik dayandırıldı.`);
+    this.notifySubscribers('chat_status_updated', {
+      phone: phone,
+      isPaused: true,
+      remainingMinutes: minutes
+    });
+    return { success: true, phone, isPaused: true, remainingMinutes: minutes };
+  }
+
+  getAllChatStatuses() {
+    const settings = getAgentSettings();
+    const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 15;
+    const now = Date.now();
+    const result = {};
+
+    for (const [jid, timestamp] of this.humanTakeovers.entries()) {
+      const elapsedMs = now - timestamp;
+      const totalMs = takeoverMinutes * 60 * 1000;
+      if (elapsedMs < totalMs) {
+        const remainingMinutes = Math.ceil((totalMs - elapsedMs) / 60000);
+        const phone = jid.replace(/@.+/, '');
+        result[phone] = {
+          isPaused: true,
+          remainingMinutes: remainingMinutes,
+          pausedAt: new Date(timestamp).toISOString()
+        };
+      }
+    }
+    return result;
+  }
+
   getStatus() {
     return {
       status: this.status,
       qrCodeDataUrl: this.qrCodeDataUrl,
       userInfo: this.userInfo,
       autoReplyEnabled: this.autoReplyEnabled,
+      chatStatuses: this.getAllChatStatuses(),
       recentMessages: this.recentMessages.slice(-20)
     };
   }
@@ -151,18 +201,19 @@ class WhatsAppClient {
           msg.message?.imageMessage?.caption ||
           '';
 
-        // 1. HUMAN TAKEOVER / RESUME COMMAND:
-        // If YOU send a message in this chat:
+        // 1. HUMAN TAKEOVER:
+        // If YOU send a message in this chat, bot pauses for that contact and notifies dashboard
         if (msg.key.fromMe) {
+          const settings = getAgentSettings();
+          const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 15;
           this.humanTakeovers = this.humanTakeovers || new Map();
-          const cleanText = text.trim().toLowerCase();
-          if (cleanText === '!bot' || cleanText === '!resume' || cleanText === '!aktiv' || cleanText === '!start') {
-            this.humanTakeovers.delete(remoteJid);
-            console.log(`🤖 +${senderPhone} üçün bot dərhal yenidən aktivləşdirildi.`);
-          } else {
-            this.humanTakeovers.set(remoteJid, Date.now());
-            console.log(`👤 Siz +${senderPhone} ilə şəxsən söhbətə daxil oldunuz. Bot bu çatda ${getAgentSettings().human_takeover_minutes || 2} dəqiqə susacaq.`);
-          }
+          this.humanTakeovers.set(remoteJid, Date.now());
+          console.log(`👤 Siz +${senderPhone} ilə şəxsən söhbətə daxil oldunuz. Bot bu çatda ${takeoverMinutes} dəqiqə avtomatik susacaq.`);
+          this.notifySubscribers('chat_status_updated', {
+            phone: senderPhone,
+            isPaused: true,
+            remainingMinutes: takeoverMinutes
+          });
           continue;
         }
 
