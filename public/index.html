@@ -219,22 +219,38 @@
             </div>
           </div>
 
-          <!-- Section 3: Sənədlər və Qiymət -->
+          <!-- Section 3: Sənədlər və İpoteka Şərtləri -->
           <div class="form-section">
-            <h4>📄 Sənədlər və Qiymət</h4>
+            <h4>📄 Sənədlər və İpoteka Şərtləri</h4>
             <div class="form-row">
               <div class="form-group">
-                <label>Qiymət (AZN):</label>
-                <input type="number" id="prop-price" name="price_azn" class="form-input">
+                <label>İlkin Ödəniş (AZN):</label>
+                <input type="number" id="prop-initial-payment" name="initial_payment_azn" class="form-input">
               </div>
               <div class="form-group">
-                <label>Sənəd Növü (Kupça):</label>
-                <input type="text" id="prop-doc" name="document_type" class="form-input">
+                <label>Aylıq Ödəniş (AZN):</label>
+                <input type="number" id="prop-monthly-payment" name="monthly_payment_azn" class="form-input">
               </div>
             </div>
-            <div class="form-group">
-              <label>İpoteka Uyğunluğu:</label>
-              <input type="text" id="prop-mortgage" name="mortgage_eligible" class="form-input">
+            <div class="form-row">
+              <div class="form-group">
+                <label>İpoteka Faizi:</label>
+                <input type="text" id="prop-interest-rate" name="interest_rate" class="form-input" placeholder="4%">
+              </div>
+              <div class="form-group">
+                <label>Qalıq Müddət:</label>
+                <input type="text" id="prop-remaining-period" name="remaining_period" class="form-input" placeholder="23 il">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Sənəd Növü:</label>
+                <input type="text" id="prop-doc" name="document_type" class="form-input">
+              </div>
+              <div class="form-group">
+                <label>İpoteka / Ötürmə:</label>
+                <input type="text" id="prop-mortgage" name="mortgage_transfer" class="form-input">
+              </div>
             </div>
             <div class="form-group">
               <label>Endirim / Razılaşma Siyasəti:</label>

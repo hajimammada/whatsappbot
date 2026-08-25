@@ -1,48 +1,47 @@
 {
   "property_info": {
-    "title": "Nəsimi rayonunda 3 otaqlı tam təmirli mənzil",
+    "title": "Sumqayıt, Bağçaşəhər YK - Qanuni 2 otaq, Hazır 4%-li İpoteka",
     "property_type": "Mənzil (Yeni tikili)",
-    "city": "Bakı",
-    "district": "Nəsimi rayonu",
-    "metro_proximity": "28 May və Nizami m/s (piyada 7-8 dəqiqə)",
-    "landmark": "Koroğlu parkının yanı, Mərkəzi Banka yaxın",
-    "address": "Nəsimi r., Füzuli küçəsi",
+    "city": "Sumqayıt",
+    "complex_name": "Bağçaşəhər Yaşayış Kompleksi",
+    "location_details": "Sumqayıt şəhəri, Bağçaşəhər yaşayış kompleksi",
+    "landmark": "Bağçaşəhər kompleksi, infrastruktur baxımından çox əlverişli və sakit məkan",
     "google_maps_url": "https://maps.google.com"
   },
   "specifications": {
-    "rooms": "3 otaqlı (qanuni / radnoy 3 otaq, otaqlar geniş və işıqlıdır)",
-    "area_sqm": 115,
-    "floor": 7,
-    "total_floors": 16,
-    "ceiling_height_m": 3.1,
-    "balcony": "2 ədəd eyvan (şüşəbəndli və açıq)",
-    "bathrooms": "2 sanitar qovşaq (ayrı-ayrı)"
+    "rooms": "Qanuni 2 otaq (studiya deyil, mətbəx tam ayrıdır / radnoy 2 otaq)",
+    "area_sqm": 90,
+    "floor": 6,
+    "balcony": "Eyvan mövcuddur",
+    "layout": "Geniş dəhliz, ayrı mətbəx, işıqlı və rahat otaqlar"
   },
   "renovation_and_utilities": {
-    "renovation_status": "Əla təmirli, keyfiyyətli materiallarla dizayn təmiri edilib",
-    "furnished_status": "Mətbəx mebeli, kombi və quraşdırılmış texnika qiymətə daxildir",
-    "heating_system": "Kombi istilik sistemi, mətbəx və hamamda isti döşəmə",
-    "utilities": "Qaz, su, işıq daimidir və fasiləsizdir (ehtiyat su çəni və generator var)",
-    "building_amenities": "2 ədəd sürətli səssiz lift, 24/7 mühafizə xidməti, kamera nəzarəti, 2 mərtəbəli yeraltı parkinq"
+    "renovation_status": "Tam təmirli (yüksək keyfiyyətli materiallarla təmir olunub)",
+    "furnished_status": "Əşyalı satılır (əşyalar qiymətə daxildir)",
+    "heating_system": "Kombi istilik sistemi quraşdırılıb və işləkdir",
+    "utilities": "Qaz, su, işıq, internet daimidir. Sürətli lift mövcuddur."
   },
-  "documents_and_legal": {
-    "document_type": "Kupça (Çıxarış) var",
-    "mortgage_eligible": "Bəli, ipotekaya tam yararlıdır (dövlət və kommersiya)",
-    "registration_status": "Mənzildə qeydiyyatda heç kim yoxdur, sənədlər dərhal notarial alqı-satqıya hazırdır",
-    "owner_status": "Birbaşa sahibindən satılır (makler və ya şirkət deyil)"
+  "documents_and_mortgage": {
+    "document_type": "Çıxarış (Kupça) var",
+    "mortgage_type": "Hazır 4%-li güzəştli dövlət ipotekası",
+    "mortgage_transfer": "Ötürməsi (adına keçirilməsi) tam aktivdir və rəsmidir",
+    "transfer_requirements": "Alıcının adına rəsmi iş yeri / gəlir tələbi dövlət ipoteka qaydalarına uyğun olmalıdır",
+    "owner_status": "Birbaşa mülkiyyətçi tərəfindən satılır"
   },
-  "pricing_and_negotiation": {
-    "price_azn": 245000,
+  "financial_details": {
+    "initial_payment_azn": 55000,
+    "monthly_payment_azn": 703,
+    "interest_rate": "4%",
+    "remaining_period": "23 il",
     "currency": "AZN",
-    "discount_policy": "Qiymətdə yalnız evə real baxışdan sonra cüzi endirim mümkündür. Telefonda və ya mesajda son qiymət müzakirə edilmir.",
-    "payment_method": "Nağd və ya bank ipotekası",
-    "barter_policy": "Barter və ya hissə-hissə (kreditlə) satılmır"
+    "discount_policy": "İlkin ödənişdə yalnız evə real baxışdan sonra cüzi endirim mümkündür. Telefonda və ya mesajda son qiymət müzakirə edilmir.",
+    "payment_structure": "İlkin ödəniş: 55 000 AZN, Aylıq: 703 AZN (4% illik faizlə, 23 il qalıq müddət)"
   },
   "viewing_schedule": {
-    "availability_hours": "Həftə içi 17:00 - 21:00, Şənbə və Bazar günləri 11:00 - 20:00",
-    "booking_requirement": "Baxış üçün ən azı 1 saat əvvəldən xəbər edilməsi və dəqiq saatın razılaşdırılması xahiş olunur."
+    "availability_hours": "Həftə içi 17:00 - 21:00, Şənbə və Bazar günləri 11:00 - 20:00 (əvvəlcədən razılaşdırmaqla)",
+    "booking_requirement": "Baxış üçün zəhmət olmasa gəlmək istədiyiniz gün/saatı və adınızı qeyd edin."
   },
   "rules_for_brokers": {
-    "broker_policy": "Maklerlər və vasitəçilər yalnız real alıcı ilə birlikdə müraciət edə bilərlər. Şəkilləri öz adınızdan elan saytlarında paylaşmaq qadağandır."
+    "broker_policy": "Maklerlər yalnız real alıcı ilə müraciət edə bilərlər. Şəkilləri öz adınızdan elan saytlarında paylaşmaq qadağandır."
   }
 }

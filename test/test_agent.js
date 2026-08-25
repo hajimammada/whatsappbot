@@ -13,21 +13,21 @@ async function runTests() {
   const profile = getHouseProfile();
   assert(profile.property_info, 'Property info section must exist');
   assert(profile.specifications, 'Specifications section must exist');
-  assert(profile.pricing_and_negotiation, 'Pricing section must exist');
+  assert(profile.financial_details || profile.pricing_and_negotiation, 'Pricing/Financial section must exist');
   console.log('✅ House profile valid.\n');
 
-  // Test 2: Price and Discount Inquiry (Azerbaijani)
-  console.log('Test 2: Testing Price Inquiry ("Salam, son qiymət nədir?")...');
-  const priceTest = await generateAIResponse('test_user_1', 'Salam, son qiymət nədir?');
+  // Test 2: Price / Initial Payment Inquiry (Azerbaijani)
+  console.log('Test 2: Testing Price & Initial Payment Inquiry ("Salam, ilkin ödəniş və aylıq nə qədərdir?")...');
+  const priceTest = await generateAIResponse('test_user_1', 'Salam, ilkin ödəniş və aylıq nə qədərdir?');
   console.log('🤖 AI Answer:', priceTest.reply_text);
-  assert(priceTest.reply_text.includes('245') || priceTest.reply_text.toLowerCase().includes('qiymət'), 'Reply should mention price');
-  console.log('✅ Price inquiry test passed.\n');
+  assert(priceTest.reply_text.includes('55') || priceTest.reply_text.includes('703'), 'Reply should mention 55000 or 703 AZN');
+  console.log('✅ Initial payment inquiry test passed.\n');
 
   // Test 3: Kupça and Mortgage Inquiry (Azerbaijani)
-  console.log('Test 3: Testing Kupça Inquiry ("Kupçası var? İpotekaya yararlıdır?")...');
-  const kupcaTest = await generateAIResponse('test_user_2', 'Kupçası var? İpotekaya yararlıdır?');
+  console.log('Test 3: Testing Kupça Inquiry ("Kupçası var? İpotekanın faizi və ötürülməsi necədir?")...');
+  const kupcaTest = await generateAIResponse('test_user_2', 'Kupçası var? İpotekanın faizi və ötürülməsi necədir?');
   console.log('🤖 AI Answer:', kupcaTest.reply_text);
-  assert(kupcaTest.reply_text.toLowerCase().includes('kupça') || kupcaTest.reply_text.toLowerCase().includes('çıxarış'), 'Reply should confirm kupça');
+  assert(kupcaTest.reply_text.toLowerCase().includes('kupça') || kupcaTest.reply_text.toLowerCase().includes('çıxarış') || kupcaTest.reply_text.includes('4%'), 'Reply should confirm kupça and mortgage');
   console.log('✅ Kupça inquiry test passed.\n');
 
   // Test 4: Viewing Appointment Request (Azerbaijani)

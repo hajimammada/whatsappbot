@@ -202,15 +202,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const info = p.property_info || {};
     const specs = p.specifications || {};
     const reno = p.renovation_and_utilities || {};
-    const docs = p.documents_and_legal || {};
-    const pricing = p.pricing_and_negotiation || {};
+    const docs = p.documents_and_mortgage || p.documents_and_legal || {};
+    const fin = p.financial_details || p.pricing_and_negotiation || {};
     const schedule = p.viewing_schedule || {};
 
     document.getElementById('prop-title').value = info.title || '';
-    document.getElementById('prop-district').value = info.district || '';
-    document.getElementById('prop-metro').value = info.metro_proximity || '';
+    document.getElementById('prop-district').value = info.city || info.district || '';
+    document.getElementById('prop-metro').value = info.complex_name || info.metro_proximity || '';
     document.getElementById('prop-landmark').value = info.landmark || '';
-    document.getElementById('prop-address').value = info.address || '';
+    document.getElementById('prop-address').value = info.location_details || info.address || '';
 
     document.getElementById('prop-rooms').value = specs.rooms || '';
     document.getElementById('prop-area').value = specs.area_sqm || '';
@@ -218,10 +218,14 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('prop-total-floors').value = specs.total_floors || '';
     document.getElementById('prop-balcony').value = specs.balcony || '';
 
-    document.getElementById('prop-price').value = pricing.price_azn || '';
+    document.getElementById('prop-initial-payment').value = fin.initial_payment_azn || '';
+    document.getElementById('prop-monthly-payment').value = fin.monthly_payment_azn || '';
+    document.getElementById('prop-interest-rate').value = fin.interest_rate || '4%';
+    document.getElementById('prop-remaining-period').value = fin.remaining_period || '23 il';
+
     document.getElementById('prop-doc').value = docs.document_type || '';
-    document.getElementById('prop-mortgage').value = docs.mortgage_eligible || '';
-    document.getElementById('prop-discount-policy').value = pricing.discount_policy || '';
+    document.getElementById('prop-mortgage').value = docs.mortgage_transfer || docs.mortgage_type || '';
+    document.getElementById('prop-discount-policy').value = fin.discount_policy || '';
 
     document.getElementById('prop-reno').value = reno.renovation_status || '';
     document.getElementById('prop-furnished').value = reno.furnished_status || '';
@@ -237,27 +241,30 @@ document.addEventListener('DOMContentLoaded', () => {
       property_info: {
         ...currentProfile.property_info,
         title: document.getElementById('prop-title').value,
-        district: document.getElementById('prop-district').value,
-        metro_proximity: document.getElementById('prop-metro').value,
+        city: document.getElementById('prop-district').value,
+        complex_name: document.getElementById('prop-metro').value,
         landmark: document.getElementById('prop-landmark').value,
-        address: document.getElementById('prop-address').value
+        location_details: document.getElementById('prop-address').value
       },
       specifications: {
         ...currentProfile.specifications,
         rooms: document.getElementById('prop-rooms').value,
         area_sqm: Number(document.getElementById('prop-area').value),
         floor: Number(document.getElementById('prop-floor').value),
-        total_floors: Number(document.getElementById('prop-total-floors').value),
         balcony: document.getElementById('prop-balcony').value
       },
-      documents_and_legal: {
-        ...currentProfile.documents_and_legal,
+      documents_and_mortgage: {
+        ...currentProfile.documents_and_mortgage,
         document_type: document.getElementById('prop-doc').value,
-        mortgage_eligible: document.getElementById('prop-mortgage').value
+        mortgage_type: 'Hazır 4%-li güzəştli dövlət ipotekası',
+        mortgage_transfer: document.getElementById('prop-mortgage').value
       },
-      pricing_and_negotiation: {
-        ...currentProfile.pricing_and_negotiation,
-        price_azn: Number(document.getElementById('prop-price').value),
+      financial_details: {
+        ...currentProfile.financial_details,
+        initial_payment_azn: Number(document.getElementById('prop-initial-payment').value),
+        monthly_payment_azn: Number(document.getElementById('prop-monthly-payment').value),
+        interest_rate: document.getElementById('prop-interest-rate').value,
+        remaining_period: document.getElementById('prop-remaining-period').value,
         discount_policy: document.getElementById('prop-discount-policy').value
       },
       renovation_and_utilities: {

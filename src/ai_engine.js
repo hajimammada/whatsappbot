@@ -81,8 +81,8 @@ function fallbackRuleEngine(incomingMessage, houseProfile) {
   const info = houseProfile.property_info || {};
   const specs = houseProfile.specifications || {};
   const reno = houseProfile.renovation_and_utilities || {};
-  const docs = houseProfile.documents_and_legal || {};
-  const pricing = houseProfile.pricing_and_negotiation || {};
+  const docs = houseProfile.documents_and_mortgage || houseProfile.documents_and_legal || {};
+  const fin = houseProfile.financial_details || houseProfile.pricing_and_negotiation || {};
   const schedule = houseProfile.viewing_schedule || {};
 
   let isViewing = false;
@@ -94,38 +94,45 @@ function fallbackRuleEngine(incomingMessage, houseProfile) {
     lang = "ru";
   }
 
+  const initialPay = fin.initial_payment_azn ? fin.initial_payment_azn.toLocaleString() : "55,000";
+  const monthlyPay = fin.monthly_payment_azn ? fin.monthly_payment_azn.toLocaleString() : "703";
+  const interestRate = fin.interest_rate || "4%";
+  const remainingPeriod = fin.remaining_period || "23 il";
+  const complexName = info.complex_name || "Bağçaşəhər YK";
+  const city = info.city || "Sumqayıt";
+
   if (lang === "ru") {
-    if (msg.includes("цена") || msg.includes("стоимость") || msg.includes("последняя цена") || msg.includes("скидк") || msg.includes("окончательно")) {
-      reply = `Здравствуйте! Стоимость квартиры: ${pricing.price_azn ? pricing.price_azn.toLocaleString() : '245,000'} AZN. ${pricing.discount_policy || 'Небольшая скидка возможна только после реального осмотра квартиры.'}`;
-    } else if (msg.includes("купчая") || msg.includes("документ") || msg.includes("чыхарыш") || msg.includes("ипотек")) {
-      reply = `Здравствуйте! Документы: ${docs.document_type || 'Купчая (Çıxarış) есть'}. ${docs.mortgage_eligible || 'Подходит под государственную и коммерческую ипотеку.'}`;
-    } else if (msg.includes("адрес") || msg.includes("где") || msg.includes("локация") || msg.includes("метро") || msg.includes("ориентир")) {
-      reply = `Квартира находится по адресу: ${info.district || 'Насиминский р.'}, ${info.landmark || 'ориентир м. 28 Мая / Низами'}. Точная локация: ${info.address || ''}`;
+    if (msg.includes("цена") || msg.includes("первоначальный") || msg.includes("взнос") || msg.includes("стоимость") || msg.includes("скидк") || msg.includes("окончательно")) {
+      reply = `Здравствуйте! Квартира продается по льготной 4% государственной ипотеке.\n\n💵 Первоначальный взнос (на руки): ${initialPay} AZN\n📅 Ежемесячный платеж: ${monthlyPay} AZN\n⏳ Оставшийся срок: ${remainingPeriod}\n\n${fin.discount_policy || 'Небольшая скидка на первоначальный взнос возможна только после осмотра.'}`;
+    } else if (msg.includes("купчая") || msg.includes("документ") || msg.includes("чыхарыш") || msg.includes("ипотек") || msg.includes("переоформлен")) {
+      reply = `Здравствуйте! Документы: ${docs.document_type || 'Купчая (Çıxarış) есть'}. ${docs.mortgage_type || 'Готовая 4% государственная ипотека'}. Переоформление на покупателя полностью активно и официально.`;
+    } else if (msg.includes("адрес") || msg.includes("где") || msg.includes("локация") || msg.includes("сумгаит")) {
+      reply = `Квартира находится в г. ${city}, жилой комплекс "${complexName}". 6-й этаж.`;
     } else if (msg.includes("посмотреть") || msg.includes("осмотр") || msg.includes("когда можно") || msg.includes("приехать") || msg.includes("время")) {
       isViewing = true;
       reply = `Здравствуйте! Осмотр возможен: ${schedule.availability_hours || 'в будние дни 17:00-21:00, в выходные 11:00-20:00'}. Пожалуйста, укажите Ваше имя и удобное для Вас время, чтобы согласовать визит 🏡`;
-    } else if (msg.includes("ремонт") || msg.includes("мебель") || msg.includes("комби") || msg.includes("комнат") || msg.includes("этаж")) {
-      reply = `Квартира: ${specs.rooms || '3 комнаты'}, площадь: ${specs.area_sqm || 115} м², этаж: ${specs.floor}/${specs.total_floors}. ${reno.renovation_status || 'Отличный ремонт'}. Отопление: ${reno.heating_system || 'Комби'}.`;
+    } else if (msg.includes("ремонт") || msg.includes("мебель") || msg.includes("комби") || msg.includes("комнат") || msg.includes("студия") || msg.includes("этаж")) {
+      reply = `Квартира: ${specs.rooms || '2 раздельные комнаты (не студия, кухня отдельно)'}, площадь: ${specs.area_sqm || 90} м², 6-й этаж. ${reno.renovation_status || 'Полный ремонт'}. Продается с мебелью, система комби установлена.`;
     } else {
-      reply = `Здравствуйте! Спасибо за интерес к объявлению. Квартира: ${specs.rooms || '3-комнатная'}, ${specs.area_sqm || 115} м², ${info.district || 'Насиминский р.'}. Цена: ${pricing.price_azn ? pricing.price_azn.toLocaleString() : '245,000'} AZN. Купчая есть, подходит под ипотеку. Чем могу помочь?`;
+      reply = `Здравствуйте! ${city}, ЖК "${complexName}". ${specs.rooms || '2-комнатная'}, ${specs.area_sqm || 90} м², 6-й этаж. Готовая 4% ипотека: Первоначальный взнос ${initialPay} AZN, ежемесячно ${monthlyPay} AZN (${remainingPeriod}). Купчая есть, переоформление активно. Чем могу помочь? 🏡`;
     }
   } else {
     // Azerbaijani responses
-    if (msg.includes("qiymət") || msg.includes("neçəyə") || msg.includes("son qiymət") || msg.includes("endirim") || msg.includes("asagi") || msg.includes("aşağı")) {
-      reply = `Salam! Mənzilin qiyməti: ${pricing.price_azn ? pricing.price_azn.toLocaleString() : '245 000'} AZN. ${pricing.discount_policy || 'Qiymətdə yalnız evə real baxışdan sonra cüzi endirim mümkündür.'}`;
-    } else if (msg.includes("kupca") || msg.includes("kupça") || msg.includes("cixaris") || msg.includes("çıxarış") || msg.includes("ipoteka") || msg.includes("sened") || msg.includes("sənəd")) {
-      reply = `Salam! Sənəd: ${docs.document_type || 'Kupça (Çıxarış) var'}. ${docs.mortgage_eligible || 'İpotekaya tam yararlıdır.'} ${docs.registration_status || 'Qeydiyyatda heç kim yoxdur.'}`;
-    } else if (msg.includes("unvan") || msg.includes("ünvan") || msg.includes("harada") || msg.includes("yerlesir") || msg.includes("yerləşir") || msg.includes("metro") || msg.includes("oriyentir")) {
-      reply = `Mənzil ${info.district || 'Nəsimi r.'}, ${info.metro_proximity || '28 May və Nizami m/s yaxınlığı'}, ${info.landmark || 'Koroğlu parkı ətrafı'} ünvanında yerləşir. 📍`;
+    if (msg.includes("ilkin") || msg.includes("ele") || msg.includes("ələ") || msg.includes("qiymət") || msg.includes("neçəyə") || msg.includes("son qiymət") || msg.includes("endirim") || msg.includes("ayliq") || msg.includes("aylıq") || msg.includes("faiz")) {
+      reply = `Salam! Mənzil hazır 4%-li güzəştli dövlət ipotekasındadır:\n\n💵 İlkin ödəniş (ələ): ${initialPay} AZN\n📅 Aylıq ödəniş: ${monthlyPay} AZN (4% faizlə)\n⏳ Qalıq müddət: ${remainingPeriod}\n\n${fin.discount_policy || 'İlkin ödənişdə yalnız evə real baxışdan sonra cüzi endirim mümkündür.'}`;
+    } else if (msg.includes("kupca") || msg.includes("kupça") || msg.includes("cixaris") || msg.includes("çıxarış") || msg.includes("ipoteka") || msg.includes("oturme") || msg.includes("ötürmə") || msg.includes("adına") || msg.includes("sened") || msg.includes("sənəd")) {
+      reply = `Salam! Sənəd: ${docs.document_type || 'Çıxarış (Kupça) var'}. ${docs.mortgage_type || 'Hazır 4%-li ipoteka'}. ${docs.mortgage_transfer || 'Ötürməsi tam aktivdir və rəsmidir.'}`;
+    } else if (msg.includes("unvan") || msg.includes("ünvan") || msg.includes("harada") || msg.includes("yerlesir") || msg.includes("yerləşir") || msg.includes("kompleks") || msg.includes("sumqayit") || msg.includes("sumqayıt") || msg.includes("bagcaseher") || msg.includes("bağçaşəhər")) {
+      reply = `Mənzil ${city} şəhəri, "${complexName}" yaşayış kompleksində, 6-cı mərtəbədə yerləşir. 📍`;
     } else if (msg.includes("baxmaq") || msg.includes("baxis") || msg.includes("baxış") || msg.includes("ne vaxt") || msg.includes("nə vaxt") || msg.includes("gelmek") || msg.includes("gəlmək") || msg.includes("gorus") || msg.includes("görüş")) {
       isViewing = true;
       reply = `Salam! Mənzilə baxış vaxtları: ${schedule.availability_hours || 'Həftə içi 17:00 - 21:00, Həftə sonu 11:00 - 20:00'}. Baxış üçün zəhmət olmasa adınızı və gəlmək istədiyiniz dəqiq gün/saatı qeyd edin 🏡`;
-    } else if (msg.includes("temir") || msg.includes("təmir") || msg.includes("esya") || msg.includes("əşya") || msg.includes("kombi") || msg.includes("otaq") || msg.includes("mertebe") || msg.includes("mərtəbə") || msg.includes("kvadrat") || msg.includes("sahe") || msg.includes("sahə")) {
-      reply = `Mənzil: ${specs.rooms || '3 otaqlı'}, sahəsi: ${specs.area_sqm || 115} m², mərtəbə: ${specs.floor}/${specs.total_floors}. ${reno.renovation_status || 'Əla təmirli'}. İstilik sistemi: ${reno.heating_system || 'Kombi'}. ${reno.furnished_status || ''}`;
+    } else if (msg.includes("temir") || msg.includes("təmir") || msg.includes("esya") || msg.includes("əşya") || msg.includes("kombi") || msg.includes("otaq") || msg.includes("studia") || msg.includes("studiya") || msg.includes("metbex") || msg.includes("mətbəx") || msg.includes("mertebe") || msg.includes("mərtəbə") || msg.includes("kvadrat") || msg.includes("sahe") || msg.includes("sahə")) {
+      reply = `Mənzil: ${specs.rooms || 'Qanuni 2 otaq (studiya deyil, mətbəx ayrıdır)'}, sahəsi: ${specs.area_sqm || 90} kv.m, ${specs.floor || 6}-cı mərtəbə. ${reno.renovation_status || 'Tam təmirli'}. ${reno.furnished_status || 'Əşyalıdır'}, ${reno.heating_system || 'Kombi var'}.`;
     } else if (msg.includes("makler") || msg.includes("vasiteci") || msg.includes("vasitəçi") || msg.includes("faiz") || msg.includes("komissiya")) {
       reply = `Mənzil birbaşa mülkiyyətçi tərəfindən satılır. Maklerlər yalnız real alıcıları olduğu halda müraciət edə bilərlər. Şəkillərin icazəsiz paylaşılması qadağandır.`;
     } else {
-      reply = `Salam! Elanla maraqlandığınız üçün təşəkkür edirik. Mənzil: ${specs.rooms || '3 otaq'}, ${specs.area_sqm || 115} m², ${info.district || 'Nəsimi r.'}. Qiymət: ${pricing.price_azn ? pricing.price_azn.toLocaleString() : '245 000'} AZN. Kupçası var, ipotekaya yararlıdır. Hansı məlumatla maraqlanırsınız? 🏡`;
+      reply = `Salam! ${city}, "${complexName}". ${specs.rooms || 'Qanuni 2 otaq'}, ${specs.area_sqm || 90} kv.m, ${specs.floor || 6}-cı mərtəbə. Tam təmirli, əşyalı, kombili. Hazır 4% ipoteka: İlkin ödəniş ${initialPay} AZN, aylıq ${monthlyPay} AZN (${remainingPeriod}). Kupça var, ötürməsi aktivdir. Hansı məlumatla maraqlanırsınız? 🏡`;
     }
   }
 
