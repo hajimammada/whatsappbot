@@ -1,3 +1,4 @@
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -155,7 +156,7 @@ async function generateAIResponse(contactId, incomingMessage) {
   if ((provider === 'gemini' || !openaiKey && !groqKey) && geminiKey && geminiKey !== 'your_gemini_api_key_here') {
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
-      const modelName = (agentSettings.models && agentSettings.models.gemini && agentSettings.models.gemini.model_name) || "gemini-1.5-flash";
+      const modelName = (agentSettings.models && agentSettings.models.gemini && agentSettings.models.gemini.model_name) || "gemini-3.6-flash";
       const model = genAI.getGenerativeModel({
         model: modelName,
         generationConfig: {

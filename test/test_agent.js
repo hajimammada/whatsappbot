@@ -1,3 +1,4 @@
+require('dotenv').config();
 const assert = require('assert');
 const { generateAIResponse, getHouseProfile } = require('../src/ai_engine');
 const { recordLead, getLeads, updateLeadStatus } = require('../src/lead_manager');
