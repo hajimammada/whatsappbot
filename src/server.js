@@ -74,7 +74,7 @@ function createServer() {
   });
 
   app.post('/api/chat/:phone/pause', (req, res) => {
-    const minutes = req.body.minutes || 15;
+    const minutes = req.body.minutes || 300;
     const result = waClient.pauseBotForChat(req.params.phone, minutes);
     res.json(result);
   });

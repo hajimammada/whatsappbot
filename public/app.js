@@ -332,6 +332,14 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    function formatRemainingTime(mins) {
+      if (!mins || mins <= 0) return '0 dəq';
+      if (mins < 60) return `${mins} dəq`;
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return m > 0 ? `${h} saat ${m} dəq` : `${h} saat`;
+    }
+
     leadsTbody.innerHTML = leads.map(l => {
       const isHigh = l.interestLevel === 'high';
       const isViewing = l.status === 'viewing_requested';
@@ -340,16 +348,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const chatStatus = chatStatuses[l.phoneNumber];
       const isPaused = chatStatus && chatStatus.isPaused;
-      const remainingMins = chatStatus?.remainingMinutes || 15;
+      const remainingMins = chatStatus?.remainingMinutes || 300;
+      const remainingFormatted = formatRemainingTime(remainingMins);
 
       const botControlHtml = isPaused
         ? `<div class="bot-control-cell">
-             <span class="badge-lead badge-paused" title="Siz müdaxilə etdiyiniz üçün bot dayanıb">⏸️ Dayandırılıb (${remainingMins} dəq)</span>
+             <span class="badge-lead badge-paused" title="Siz müdaxilə etdiyiniz üçün bot 5 saatlıq dayanıb">⏸️ Dayandırılıb (${remainingFormatted})</span>
              <button class="btn btn-primary btn-xs btn-resume-bot" data-phone="${l.phoneNumber}">▶️ Botu Aktivləşdir</button>
            </div>`
         : `<div class="bot-control-cell">
              <span class="badge-lead badge-bot-active">🟢 Aktivdir</span>
-             <button class="btn btn-secondary btn-xs btn-pause-bot" data-phone="${l.phoneNumber}">⏸️ Dayandır</button>
+             <button class="btn btn-secondary btn-xs btn-pause-bot" data-phone="${l.phoneNumber}">⏸️ Dayandır (5 saat)</button>
            </div>`;
 
       return `
@@ -403,7 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
           await fetch(`/api/chat/${phone}/pause`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ minutes: 15 })
+            body: JSON.stringify({ minutes: 300 })
           });
           await loadLeads();
         } catch (e) {

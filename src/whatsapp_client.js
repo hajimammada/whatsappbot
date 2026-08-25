@@ -56,11 +56,11 @@ class WhatsAppClient {
     return { success: true, phone, isPaused: false };
   }
 
-  pauseBotForChat(phoneOrJid, minutes = 15) {
+  pauseBotForChat(phoneOrJid, minutes = 300) {
     const jid = phoneOrJid.includes('@') ? phoneOrJid : `${phoneOrJid}@s.whatsapp.net`;
     this.humanTakeovers.set(jid, Date.now());
     const phone = phoneOrJid.replace(/@.+/, '');
-    console.log(`⏸️ +${phone} üçün bot panel üzərindən ${minutes} dəqiqəlik dayandırıldı.`);
+    console.log(`⏸️ +${phone} üçün bot panel üzərindən ${minutes} dəqiqəlik (${Math.round(minutes/60)} saatlıq) dayandırıldı.`);
     this.notifySubscribers('chat_status_updated', {
       phone: phone,
       isPaused: true,
@@ -71,7 +71,7 @@ class WhatsAppClient {
 
   getAllChatStatuses() {
     const settings = getAgentSettings();
-    const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 15;
+    const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 300;
     const now = Date.now();
     const result = {};
 
@@ -205,10 +205,10 @@ class WhatsAppClient {
         // If YOU send a message in this chat, bot pauses for that contact and notifies dashboard
         if (msg.key.fromMe) {
           const settings = getAgentSettings();
-          const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 15;
+          const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 300;
           this.humanTakeovers = this.humanTakeovers || new Map();
           this.humanTakeovers.set(remoteJid, Date.now());
-          console.log(`👤 Siz +${senderPhone} ilə şəxsən söhbətə daxil oldunuz. Bot bu çatda ${takeoverMinutes} dəqiqə avtomatik susacaq.`);
+          console.log(`👤 Siz +${senderPhone} ilə şəxsən söhbətə daxil oldunuz. Bot bu çatda ${takeoverMinutes} dəqiqə (${Math.round(takeoverMinutes/60)} saat) avtomatik susacaq.`);
           this.notifySubscribers('chat_status_updated', {
             phone: senderPhone,
             isPaused: true,
@@ -225,12 +225,12 @@ class WhatsAppClient {
 
         // Check if Owner is currently chatting in this conversation
         const settings = getAgentSettings();
-        const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 2;
+        const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 300;
         this.humanTakeovers = this.humanTakeovers || new Map();
         const lastHumanMessage = this.humanTakeovers.get(remoteJid) || 0;
 
         if (Date.now() - lastHumanMessage < takeoverMinutes * 60 * 1000) {
-          console.log(`👤 Siz şəxsən söhbətdə olduğunuz üçün bot +${senderPhone} nömrəsinə mane olmur (${takeoverMinutes} dəqiqəlik sükut aktivdir).`);
+          console.log(`👤 Siz şəxsən söhbətdə olduğunuz üçün bot +${senderPhone} nömrəsinə mane olmur (${takeoverMinutes} dəqiqəlik / 5 saatlıq sükut aktivdir).`);
           const logEntry = {
             id: msg.key.id,
             from: senderPhone,
