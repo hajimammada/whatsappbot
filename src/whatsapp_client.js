@@ -144,14 +144,6 @@ class WhatsAppClient {
 
         const senderPhone = remoteJid.replace(/@.+/, '');
 
-        // 1. HUMAN TAKEOVER: If YOU send a message in this chat, bot automatically silences itself for 15 minutes in this chat!
-        if (msg.key.fromMe) {
-          this.humanTakeovers = this.humanTakeovers || new Map();
-          this.humanTakeovers.set(remoteJid, Date.now());
-          console.log(`👤 Siz +${senderPhone} ilə şəxsən söhbətə daxil oldunuz. Bot bu çatda 15 dəqiqə avtomatik susacaq.`);
-          continue;
-        }
-
         // Extract message text
         const text =
           msg.message?.conversation ||
@@ -159,17 +151,35 @@ class WhatsAppClient {
           msg.message?.imageMessage?.caption ||
           '';
 
+        // 1. HUMAN TAKEOVER / RESUME COMMAND:
+        // If YOU send a message in this chat:
+        if (msg.key.fromMe) {
+          this.humanTakeovers = this.humanTakeovers || new Map();
+          const cleanText = text.trim().toLowerCase();
+          if (cleanText === '!bot' || cleanText === '!resume' || cleanText === '!aktiv' || cleanText === '!start') {
+            this.humanTakeovers.delete(remoteJid);
+            console.log(`🤖 +${senderPhone} üçün bot dərhal yenidən aktivləşdirildi.`);
+          } else {
+            this.humanTakeovers.set(remoteJid, Date.now());
+            console.log(`👤 Siz +${senderPhone} ilə şəxsən söhbətə daxil oldunuz. Bot bu çatda ${getAgentSettings().human_takeover_minutes || 2} dəqiqə susacaq.`);
+          }
+          continue;
+        }
+
         if (!text || text.trim() === '') continue;
 
         const pushName = msg.pushName || 'tap.az Alıcı';
 
         console.log(`\n📩 Incoming Message from +${senderPhone} (${pushName}): "${text}"`);
 
-        // Check if Owner is currently chatting in this conversation (within last 15 minutes)
+        // Check if Owner is currently chatting in this conversation
+        const settings = getAgentSettings();
+        const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 2;
         this.humanTakeovers = this.humanTakeovers || new Map();
         const lastHumanMessage = this.humanTakeovers.get(remoteJid) || 0;
-        if (Date.now() - lastHumanMessage < 15 * 60 * 1000) {
-          console.log(`👤 Siz şəxsən söhbətdə olduğunuz üçün bot +${senderPhone} nömrəsinə mane olmur (Human Takeover aktivdir).`);
+
+        if (Date.now() - lastHumanMessage < takeoverMinutes * 60 * 1000) {
+          console.log(`👤 Siz şəxsən söhbətdə olduğunuz üçün bot +${senderPhone} nömrəsinə mane olmur (${takeoverMinutes} dəqiqəlik sükut aktivdir).`);
           const logEntry = {
             id: msg.key.id,
             from: senderPhone,
@@ -211,6 +221,8 @@ class WhatsAppClient {
           continue;
         }
 
+        const processStartTime = Date.now();
+
         // Show typing indicator ("yazır...") for 2.5 seconds before replying
         try {
           await this.socket.sendPresenceUpdate('composing', remoteJid);
@@ -224,6 +236,13 @@ class WhatsAppClient {
         try {
           console.log(`🤖 Processing AI response for +${senderPhone}...`);
           const aiResponse = await generateAIResponse(remoteJid, text);
+
+          // CRITICAL SAFETY CHECK: Did the owner speak while AI was generating?
+          const currentHumanTime = this.humanTakeovers.get(remoteJid) || 0;
+          if (currentHumanTime >= processStartTime || Date.now() - currentHumanTime < takeoverMinutes * 60 * 1000) {
+            console.log(`🛑 Siz bu arada mesaj yazdığınız üçün hazırlanmış AI cavabı ləğv edildi və alıcıya göndərilmədi!`);
+            continue;
+          }
 
           console.log(`📤 Sending AI Reply to +${senderPhone}: "${aiResponse.reply_text}"`);
 
