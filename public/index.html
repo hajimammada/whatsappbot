@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>tap.az WhatsApp Real Estate AI Agent</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="brand-icon">🏡</div>
+        <div class="brand-text">
+          <h1>tap.az AI Agent</h1>
+          <span class="badge-subtitle">Real Estate WhatsApp Automation</span>
+        </div>
+      </div>
+
+      <div class="nav-controls">
+        <div class="connection-pill" id="conn-pill">
+          <span class="status-dot disconnected" id="status-dot"></span>
+          <span class="status-text" id="status-text">Qoşulur...</span>
+        </div>
+
+        <div class="toggle-wrapper">
+          <label class="switch">
+            <input type="checkbox" id="auto-reply-toggle" checked>
+            <span class="slider round"></span>
+          </label>
+          <span class="toggle-label" id="auto-reply-label">Avto-Cavab: Aktiv</span>
+        </div>
+
+        <button class="btn btn-secondary btn-sm" id="btn-reconnect" title="Yenidən qoşul">🔄 Yenilə</button>
+      </div>
+    </header>
+
+    <!-- Main Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="tab-overview">📊 İdarəetmə Paneli & QR</button>
+      <button class="tab-btn" data-tab="tab-leads">👥 Alıcılar & Görüşlər <span class="tab-badge" id="leads-count">0</span></button>
+      <button class="tab-btn" data-tab="tab-profile">⚙️ Mənzil Məlumatları (Baza)</button>
+      <button class="tab-btn" data-tab="tab-simulator">🧪 AI Sınaq Qutusu</button>
+    </nav>
+
+    <!-- Tab 1: Overview & WhatsApp Connection -->
+    <section class="tab-content active" id="tab-overview">
+      <div class="grid-2col">
+        <!-- Left: WhatsApp Connection / QR Box -->
+        <div class="card glass-card qr-card">
+          <div class="card-header">
+            <h3>📱 WhatsApp Qoşulması</h3>
+            <span class="badge" id="wa-state-badge">Gözlənilir</span>
+          </div>
+          
+          <div class="qr-container" id="qr-container">
+            <div class="qr-box" id="qr-image-wrapper">
+              <div class="spinner"></div>
+              <p class="qr-hint">QR kod hazırlanır...</p>
+            </div>
+            <div class="qr-instructions">
+              <h4>Necə qoşulmalı:</h4>
+              <ol>
+                <li>Telefonunuzda <strong>WhatsApp</strong> tətbiqini açın.</li>
+                <li><strong>Parametrlər</strong> &rarr; <strong>Əlaqəli Cihazlar</strong> (Linked Devices) bölməsinə keçin.</li>
+                <li><strong>Cihaz bağla</strong> (Link a Device) seçib bu QR kodu skan edin.</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="connected-info hidden" id="connected-info">
+            <div class="connected-badge-large">
+              <div class="icon-check">✅</div>
+              <div>
+                <h4 id="user-display-name">WhatsApp Hesabı Bağlandı</h4>
+                <p id="user-display-jid">+994XXXXXXXXX</p>
+              </div>
+            </div>
+            <p class="connected-desc">Bot aktivdir və tap.az-dan gələn sualları avtomatik cavablandırır.</p>
+            <button class="btn btn-danger btn-sm" id="btn-logout">Hesabdan çıxış et</button>
+          </div>
+        </div>
+
+        <!-- Right: Real-time Stats & Recent Messages -->
+        <div class="card glass-card">
+          <div class="card-header">
+            <h3>💬 Canlı Mesajlar & Əməliyyatlar</h3>
+            <span class="live-dot-pulse">● CANLI</span>
+          </div>
+
+          <div class="stats-mini-row">
+            <div class="mini-stat">
+              <span class="stat-number" id="stat-total-messages">0</span>
+              <span class="stat-title">Gələn Suallar</span>
+            </div>
+            <div class="mini-stat">
+              <span class="stat-number" id="stat-leads-count">0</span>
+              <span class="stat-title">Qeydə Alınan Alıcılar</span>
+            </div>
+            <div class="mini-stat">
+              <span class="stat-number" id="stat-viewings-count">0</span>
+              <span class="stat-title">Baxış İstəkləri</span>
+            </div>
+          </div>
+
+          <div class="messages-feed" id="messages-feed">
+            <div class="empty-feed-placeholder">
+              <p>Hələ ki yeni mesaj daxil olmayıb.</p>
+              <span class="subtext">WhatsApp qoşulduqdan sonra mesajlar burada real-vaxtda görünəcək.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 2: Leads & Viewing Appointments -->
+    <section class="tab-content" id="tab-leads">
+      <div class="card glass-card">
+        <div class="card-header">
+          <div>
+            <h3>👥 Potensial Alıcılar və Ev Baxışı İstəkləri</h3>
+            <p class="card-desc">Süni intellekt tərəfindən aşkar edilmiş ciddi alıcılar və onların seçdiyi vaxtlar.</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btn-refresh-leads">🔄 Yenilə</button>
+        </div>
+
+        <div class="leads-table-wrapper">
+          <table class="leads-table" id="leads-table">
+            <thead>
+              <tr>
+                <th>Alıcı / Nömrə</th>
+                <th>Status</th>
+                <th>Maraq Səviyyəsi</th>
+                <th>İstədiyi Baxış Vaxtı</th>
+                <th>Son Mesaj</th>
+                <th>Tarix</th>
+                <th>Əməliyyat</th>
+              </tr>
+            </thead>
+            <tbody id="leads-tbody">
+              <tr>
+                <td colspan="7" class="text-center">Hələ qeydə alınmış alıcı yoxdur.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: House Profile Editor -->
+    <section class="tab-content" id="tab-profile">
+      <div class="card glass-card">
+        <div class="card-header">
+          <div>
+            <h3>⚙️ Mənzil Haqqında Məlumatlar Bazası</h3>
+            <p class="card-desc">Bot bu məlumatlara əsaslanaraq alıcılara cavab verir. İstənilən parametri dəyişib yadda saxlaya bilərsiniz.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-save-profile">💾 Yadda Saxla</button>
+        </div>
+
+        <form id="profile-form" class="profile-form-grid">
+          <!-- Section 1: Əsas Məlumat və Ünvan -->
+          <div class="form-section">
+            <h4>📍 Ünvan və Məkan</h4>
+            <div class="form-group">
+              <label>Elan Başlığı:</label>
+              <input type="text" id="prop-title" name="title" class="form-input">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Şəhər / Rayon:</label>
+                <input type="text" id="prop-district" name="district" class="form-input">
+              </div>
+              <div class="form-group">
+                <label>Ən yaxın Metro:</label>
+                <input type="text" id="prop-metro" name="metro_proximity" class="form-input">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Oriyentir / Tanınan Yer:</label>
+              <input type="text" id="prop-landmark" name="landmark" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>Dəqiq Ünvan:</label>
+              <input type="text" id="prop-address" name="address" class="form-input">
+            </div>
+          </div>
+
+          <!-- Section 2: Texniki Göstəricilər -->
+          <div class="form-section">
+            <h4>📐 Mənzil Parametrləri</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Otaq Sayı:</label>
+                <input type="text" id="prop-rooms" name="rooms" class="form-input">
+              </div>
+              <div class="form-group">
+                <label>Ümumi Sahə (m²):</label>
+                <input type="number" id="prop-area" name="area_sqm" class="form-input">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Mərtəbə:</label>
+                <input type="number" id="prop-floor" name="floor" class="form-input">
+              </div>
+              <div class="form-group">
+                <label>Binanın Mərtəbə Sayı:</label>
+                <input type="number" id="prop-total-floors" name="total_floors" class="form-input">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Eyvan / Balkon:</label>
+              <input type="text" id="prop-balcony" name="balcony" class="form-input">
+            </div>
+          </div>
+
+          <!-- Section 3: Sənədlər və Qiymət -->
+          <div class="form-section">
+            <h4>📄 Sənədlər və Qiymət</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Qiymət (AZN):</label>
+                <input type="number" id="prop-price" name="price_azn" class="form-input">
+              </div>
+              <div class="form-group">
+                <label>Sənəd Növü (Kupça):</label>
+                <input type="text" id="prop-doc" name="document_type" class="form-input">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>İpoteka Uyğunluğu:</label>
+              <input type="text" id="prop-mortgage" name="mortgage_eligible" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>Endirim / Razılaşma Siyasəti:</label>
+              <textarea id="prop-discount-policy" name="discount_policy" class="form-input" rows="2"></textarea>
+            </div>
+          </div>
+
+          <!-- Section 4: Təmir, Kommunal və Baxış -->
+          <div class="form-section">
+            <h4>🛋️ Təmir, Təchizat və Baxış Vaxtı</h4>
+            <div class="form-group">
+              <label>Təmir Vəziyyəti:</label>
+              <input type="text" id="prop-reno" name="renovation_status" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>Əşyalar / Mebel:</label>
+              <input type="text" id="prop-furnished" name="furnished_status" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>İstilik Sistemi (Kombi və s.):</label>
+              <input type="text" id="prop-heating" name="heating_system" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>Baxış Saatları (Uyğun gün/saatlar):</label>
+              <input type="text" id="prop-viewing-hours" name="availability_hours" class="form-input">
+            </div>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Tab 4: AI Simulator Sandbox -->
+    <section class="tab-content" id="tab-simulator">
+      <div class="card glass-card simulator-card">
+        <div class="card-header">
+          <div>
+            <h3>🧪 AI Sınaq Qutusu (Test Sandbox)</h3>
+            <p class="card-desc">Alıcıların tap.az-da verə biləcəyi sualları burada yazaraq botun necə cavab verdiyini dərhal yoxlayın.</p>
+          </div>
+        </div>
+
+        <div class="simulator-quick-buttons">
+          <span class="quick-btn" data-msg="Salam, qiymət son nədir?">"Son qiymət nədir?"</span>
+          <span class="quick-btn" data-msg="Kupçası var? İpotekaya gedir?">"Kupça və İpoteka?"</span>
+          <span class="quick-btn" data-msg="Salam, mənzil harada yerləşir? Metroya yaxındır?">"Ünvan və Metro?"</span>
+          <span class="quick-btn" data-msg="Sabah saat 6-da evə baxmaq istəyirəm, gələ bilərəm?">"Evə baxmaq istəyirəm"</span>
+          <span class="quick-btn" data-msg="Здравствуйте! Квартира продается? Есть купчая?">"Русский язык (Купчая)"</span>
+          <span class="quick-btn" data-msg="Salam, maklerəm, müştərim var 1% faizlə işləyirsiniz?">"Makler müraciəti"</span>
+        </div>
+
+        <div class="sim-chat-window" id="sim-chat-window">
+          <div class="sim-message bot">
+            <div class="sim-avatar">🤖</div>
+            <div class="sim-bubble">Salam! Mən sizin ev satışı köməkçinizəm. Mənə alıcı sualları verin, sizə necə cavab verəcəyimi göstərim.</div>
+          </div>
+        </div>
+
+        <div class="sim-input-row">
+          <input type="text" id="sim-input" placeholder="Məsələn: 'Kupçası var?', 'Kombi işləyir?', 'Sabah baxışa gəlmək olar?'" class="form-input">
+          <button class="btn btn-primary" id="btn-sim-send">Göndər 🚀</button>
+        </div>
+
+        <div class="sim-debug-panel hidden" id="sim-debug-panel">
+          <h5>🔍 AI Təhlil Nəticəsi:</h5>
+          <pre id="sim-debug-json"></pre>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

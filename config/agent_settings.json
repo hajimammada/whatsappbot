@@ -1,0 +1,27 @@
+{
+  "agent_name": "Ev Sahibi Köməkçisi (tap.az Assistant)",
+  "language_priority": ["az", "ru", "en"],
+  "response_style": "Kibar, dəqiq, qısa və peşəkar. Uzun mətnlər yazma, suallara birbaşa və aydın cavab ver.",
+  "cooldown_seconds": 10,
+  "ignore_groups": true,
+  "ignore_status_broadcasts": true,
+  "auto_reply_enabled": true,
+  "collect_leads": true,
+  "alert_on_viewing_request": true,
+  "whitelisted_numbers": [],
+  "blacklisted_numbers": [],
+  "models": {
+    "gemini": {
+      "model_name": "gemini-1.5-flash",
+      "temperature": 0.3
+    },
+    "openai": {
+      "model_name": "gpt-4o-mini",
+      "temperature": 0.3
+    },
+    "groq": {
+      "model_name": "llama-3.3-70b-versatile",
+      "temperature": 0.3
+    }
+  }
+}

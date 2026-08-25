@@ -1,0 +1,24 @@
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment & credentials
+.env
+.env.local
+
+# WhatsApp session data (Never commit session tokens)
+auth_info_baileys/
+sessions/
+*.session
+
+# Leads and local cache data (committed .gitkeep only)
+data/*.json
+!data/leads.example.json
+
+# Logs & temp
+logs/
+*.log
+trash/
+.DS_Store
