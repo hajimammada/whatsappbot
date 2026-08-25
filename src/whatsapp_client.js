@@ -136,14 +136,21 @@ class WhatsAppClient {
       if (m.type !== 'notify') return;
 
       for (const msg of m.messages) {
-        // Ignore messages sent by ourselves
-        if (msg.key.fromMe) continue;
-
         const remoteJid = msg.key.remoteJid;
         if (!remoteJid) continue;
 
         // Ignore group chats and status broadcasts
         if (remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') continue;
+
+        const senderPhone = remoteJid.replace(/@.+/, '');
+
+        // 1. HUMAN TAKEOVER: If YOU send a message in this chat, bot automatically silences itself for 15 minutes in this chat!
+        if (msg.key.fromMe) {
+          this.humanTakeovers = this.humanTakeovers || new Map();
+          this.humanTakeovers.set(remoteJid, Date.now());
+          console.log(`👤 Siz +${senderPhone} ilə şəxsən söhbətə daxil oldunuz. Bot bu çatda 15 dəqiqə avtomatik susacaq.`);
+          continue;
+        }
 
         // Extract message text
         const text =
@@ -154,10 +161,28 @@ class WhatsAppClient {
 
         if (!text || text.trim() === '') continue;
 
-        const senderPhone = remoteJid.replace(/@.+/, '');
         const pushName = msg.pushName || 'tap.az Alıcı';
 
         console.log(`\n📩 Incoming Message from +${senderPhone} (${pushName}): "${text}"`);
+
+        // Check if Owner is currently chatting in this conversation (within last 15 minutes)
+        this.humanTakeovers = this.humanTakeovers || new Map();
+        const lastHumanMessage = this.humanTakeovers.get(remoteJid) || 0;
+        if (Date.now() - lastHumanMessage < 15 * 60 * 1000) {
+          console.log(`👤 Siz şəxsən söhbətdə olduğunuz üçün bot +${senderPhone} nömrəsinə mane olmur (Human Takeover aktivdir).`);
+          const logEntry = {
+            id: msg.key.id,
+            from: senderPhone,
+            name: pushName,
+            text: text,
+            direction: 'incoming',
+            timestamp: new Date().toISOString(),
+            status: 'human_takeover_skipped'
+          };
+          this.recentMessages.push(logEntry);
+          this.notifySubscribers('new_message', logEntry);
+          continue;
+        }
 
         // Check cooldown (10 seconds between automatic replies to same sender)
         const now = Date.now();
@@ -180,10 +205,19 @@ class WhatsAppClient {
         this.recentMessages.push(logEntry);
         this.notifySubscribers('new_message', logEntry);
 
-        // If auto-reply is disabled, just log
+        // If auto-reply is disabled globally, just log
         if (!this.autoReplyEnabled) {
-          console.log(`ℹ️ Auto-Reply is disabled. Message recorded without AI reply.`);
+          console.log(`ℹ️ Auto-Reply is disabled globally. Message recorded without AI reply.`);
           continue;
+        }
+
+        // Show typing indicator ("yazır...") for 2.5 seconds before replying
+        try {
+          await this.socket.sendPresenceUpdate('composing', remoteJid);
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+          await this.socket.sendPresenceUpdate('paused', remoteJid);
+        } catch (e) {
+          // Non-critical
         }
 
         // Generate AI response
