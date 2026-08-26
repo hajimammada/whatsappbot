@@ -1,5 +1,10 @@
 # 🏡 WhatsApp Real Estate AI Agent (tap.az Assistant)
 
+[![Live Dashboard](https://img.shields.io/badge/Live_Dashboard-Render-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://whatsappbot-8wk2.onrender.com/)
+[![WhatsApp Bot](https://img.shields.io/badge/WhatsApp-Connected-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://whatsappbot-8wk2.onrender.com/)
+
+> 🌐 **Live Web Dashboard & QR Portal**: [https://whatsappbot-8wk2.onrender.com/](https://whatsappbot-8wk2.onrender.com/)
+
 24/7 AI-powered WhatsApp Agent designed to automate buyer inquiries for property listings on **tap.az**.
 
 ---
@@ -17,7 +22,7 @@
   - Viewing hours & appointment rules
 - **Serious Buyer Lead Qualification:** Identifies when someone wants to view the property (*"Evə baxmaq istəyirəm"*), records their phone number & time, and saves them to `data/leads.json`.
 - **Instant Telegram Alert (Optional):** Sends real-time notification to your Telegram when an appointment request arrives.
-- **Local Web Dashboard (`http://localhost:3000`):**
+- **Web Dashboard ([whatsappbot-8wk2.onrender.com](https://whatsappbot-8wk2.onrender.com/)):**
   - WhatsApp pairing QR code display
   - House Profile Editor (edit prices and specs anytime)
   - Qualified Leads & Viewing Appointments manager
@@ -59,7 +64,7 @@ npm test
 
 ## 📂 Project Structure
 ```
-whatsapp_real_estate_agent/
+whatsappbot/
 ├── config/
 │   ├── house_profile.json     # All house specifications & rules
 │   └── agent_settings.json    # Bot settings & model configs
