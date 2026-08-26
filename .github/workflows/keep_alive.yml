@@ -24,7 +24,7 @@ jobs:
           
           if [ -z "$TARGET_URL" ]; then
             echo "⚠️ No APP_URL secret or input provided! Please set repository secret APP_URL."
-            TARGET_URL="https://your-app-url.vercel.app"
+            TARGET_URL="https://your-bot-name.onrender.com"
           fi
 
           PING_ENDPOINT="${TARGET_URL%/}/api/status"
