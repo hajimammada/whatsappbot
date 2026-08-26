@@ -1,0 +1,46 @@
+name: Keep-Alive Daytime Ping
+
+on:
+  schedule:
+    # Runs every 10 minutes between 04:00 and 19:59 UTC
+    # In UTC+4 (Baku / Local Time), this corresponds to 08:00 - 23:59 (Daytime)
+    - cron: '*/10 4-19 * * *'
+  workflow_dispatch:
+    inputs:
+      custom_url:
+        description: 'Optional custom URL to ping'
+        required: false
+        default: ''
+
+jobs:
+  ping:
+    name: Ping App Health Endpoint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Target App
+        run: |
+          # Priority: Manual input -> GitHub Secret APP_URL -> Default placeholder
+          TARGET_URL="${{ github.event.inputs.custom_url || secrets.APP_URL }}"
+          
+          if [ -z "$TARGET_URL" ]; then
+            echo "⚠️ No APP_URL secret or input provided! Please set repository secret APP_URL."
+            TARGET_URL="https://your-app-url.vercel.app"
+          fi
+
+          PING_ENDPOINT="${TARGET_URL%/}/api/status"
+          echo "🌐 Pinging: $PING_ENDPOINT at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+          HTTP_RESPONSE=$(curl -s -o response.json -w "%{http_code}" --max-time 30 "$PING_ENDPOINT" || echo "FAILED")
+
+          echo "HTTP Status Code: $HTTP_RESPONSE"
+          if [ -f response.json ]; then
+            echo "Response payload:"
+            cat response.json
+            echo ""
+          fi
+
+          if [ "$HTTP_RESPONSE" -ge 200 ] && [ "$HTTP_RESPONSE" -lt 400 ]; then
+            echo "✅ Ping successful! App is awake."
+          else
+            echo "⚠️ Ping received status $HTTP_RESPONSE (or request failed)."
+          fi
