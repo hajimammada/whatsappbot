@@ -40,7 +40,7 @@ async function sendTelegramAlert(lead, viewingRequest) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) return;
 
-  const text = `🏡 *YENİ EV BAXIŞI MÜRACİƏTİ (tap.az)*\n\n` +
+  const text = `💬 *YENİ GÖRÜŞ / ƏLAQƏ MÜRACİƏTİ (whatsappbot.hajimammad.com)*\n\n` +
     `👤 *Alıcı:* ${lead.name || 'Ad qeyd edilməyib'}\n` +
     `📱 *Nömrə:* \`${lead.phoneNumber}\`\n` +
     `🕒 *İstədiyi vaxt:* ${viewingRequest.preferred_time || 'Dəqiqləşdirilməyib'}\n` +

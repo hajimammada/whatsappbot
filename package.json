@@ -1,7 +1,8 @@
 {
-  "name": "whatsapp-real-estate-agent",
-  "version": "1.0.0",
-  "description": "24/7 AI WhatsApp Agent for tap.az real estate sales & inquiries",
+  "name": "whatsappbot",
+  "version": "3.2.0",
+  "description": "24/7 Universal AI WhatsApp Agent - whatsappbot.hajimammad.com",
+  "homepage": "https://whatsappbot.hajimammad.com",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {

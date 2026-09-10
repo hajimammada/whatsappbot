@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // -----------------------------------------------------------------
   const I18N = {
     az: {
-      brand_title: "WhatsApp AI Bot",
+      brand_title: "whatsappbot.hajimammad.com",
       tab_connect: "Connect",
       tab_messages: "Messages",
       tab_data: "Data",
@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
       modal_submit: "Daxil Ol 🚀"
     },
     ru: {
-      brand_title: "WhatsApp AI Bot",
+      brand_title: "whatsappbot.hajimammad.com",
       tab_connect: "Connect",
       tab_messages: "Messages",
       tab_data: "Data",
@@ -109,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
       modal_submit: "Войти 🚀"
     },
     en: {
-      brand_title: "WhatsApp AI Bot",
+      brand_title: "whatsappbot.hajimammad.com",
       tab_connect: "Connect",
       tab_messages: "Messages",
       tab_data: "Data",
@@ -423,6 +423,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const status = data.status || 'disconnected';
     statusDot.className = 'status-dot ' + status;
     const dict = I18N[currentLang];
+
+    if (data.version) {
+      updateVersionDisplay(data.version);
+    }
 
     if (status === 'connected') {
       statusText.textContent = dict.status_connected;
@@ -884,17 +888,61 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // -----------------------------------------------------------------
-  // 9. Initial Boot
+  // 9. Dynamic App Version & Status
+  // -----------------------------------------------------------------
+  function updateVersionDisplay(version) {
+    const el = document.getElementById('app-version');
+    if (el && version) {
+      const clean = String(version).trim();
+      const formatted = clean.startsWith('v') ? `@${clean}` : `@v${clean}`;
+      el.textContent = `(${formatted})`;
+    }
+  }
+
+  async function fetchVersion() {
+    try {
+      const res = await fetch('/api/version');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.version) {
+          updateVersionDisplay(data.version);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch app version:', err);
+    }
+  }
+
+  async function fetchStatus() {
+    try {
+      const res = await fetch('/api/status');
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          updateConnectionStatus(data);
+          if (data.version) {
+            updateVersionDisplay(data.version);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch status:', err);
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // 10. Initial Boot
   // -----------------------------------------------------------------
   setLanguage(currentLang);
   initSSE();
+  fetchVersion();
+  fetchStatus();
 
   if (currentApiKey) {
     updateSessionDisplay(currentApiKey);
     hideAuthModal();
     loadDocuments();
     loadLeads();
-    fetchStatus();
   } else {
     showAuthModal();
   }

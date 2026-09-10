@@ -7,6 +7,7 @@ const fs = require('fs');
 
 const { generateAIResponse, getAgentSettings } = require('./ai_engine');
 const { recordLead } = require('./lead_manager');
+const pkg = require('../package.json');
 
 const AUTH_DIR = path.join(__dirname, '..', 'auth_info_baileys');
 
@@ -122,7 +123,7 @@ class WhatsAppClient {
       logger,
       printQRInTerminal: false, // We'll handle QR custom rendering
       auth: state,
-      browser: ['tap.az Real Estate Agent', 'Chrome', '1.0.0'],
+      browser: ['whatsappbot.hajimammad.com', 'Chrome', pkg.version || '3.2.0'],
       syncFullHistory: false
     });
 
@@ -219,7 +220,7 @@ class WhatsAppClient {
 
         if (!text || text.trim() === '') continue;
 
-        const pushName = msg.pushName || 'tap.az Alıcı';
+        const pushName = msg.pushName || 'WhatsApp İstifadəçisi';
 
         console.log(`\n📩 Incoming Message from +${senderPhone} (${pushName}): "${text}"`);
 

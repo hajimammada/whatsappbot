@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const pkg = require('../package.json');
 
 const waClient = require('./whatsapp_client');
 const userManager = require('./user_manager');
@@ -94,7 +95,18 @@ function createServer() {
 
   // Get status
   app.get('/api/status', (req, res) => {
-    res.json(waClient.getStatus());
+    res.json({
+      ...waClient.getStatus(),
+      version: pkg.version
+    });
+  });
+
+  // Get app version info dynamically
+  app.get('/api/version', (req, res) => {
+    res.json({
+      name: 'whatsappbot.hajimammad.com',
+      version: pkg.version
+    });
   });
 
   // Toggle Auto-Reply

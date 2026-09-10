@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 
 async function bootstrap() {
   console.log('======================================================');
-  console.log('🏠  WHATSAPP REAL ESTATE AI AGENT (tap.az Assistant)');
+  console.log('🤖  WHATSAPP BOT - whatsappbot.hajimammad.com');
   console.log('======================================================');
   console.log(`🤖 AI Provider: ${process.env.AI_PROVIDER || 'gemini'}`);
   console.log(`⚡ Auto-Reply: ${process.env.AUTO_REPLY_ENABLED !== 'false' ? 'ENABLED' : 'DISABLED'}`);

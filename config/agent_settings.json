@@ -1,5 +1,5 @@
 {
-  "agent_name": "Ev Sahibi Köməkçisi (tap.az Assistant)",
+  "agent_name": "whatsappbot.hajimammad.com",
   "language_priority": ["az", "ru", "en"],
   "response_style": "Kibar, dəqiq, qısa və peşəkar. Uzun mətnlər yazma, suallara birbaşa və aydın cavab ver.",
   "cooldown_seconds": 10,

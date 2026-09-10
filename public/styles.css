@@ -68,13 +68,41 @@ body {
   font-size: 28px;
 }
 
-.brand-text h1 {
-  font-size: 20px;
+.brand-text h1,
+.brand-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 19px;
   font-weight: 800;
   letter-spacing: -0.5px;
+  margin: 0;
+}
+
+.brand-name {
   background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.brand-version {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  letter-spacing: 0.3px;
+  -webkit-text-fill-color: #38bdf8;
+  vertical-align: middle;
+  transition: all 0.2s ease;
+}
+
+.brand-version:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.6);
 }
 
 .badge-subtitle {
