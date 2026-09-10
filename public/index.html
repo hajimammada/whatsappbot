@@ -35,6 +35,12 @@
           <span class="toggle-label" id="auto-reply-label">Avto-Cavab: Aktiv</span>
         </div>
 
+        <div class="user-session-pill" id="user-session-pill">
+          <span class="key-icon">🔑</span>
+          <span class="key-text" id="active-api-key-display">---</span>
+          <button class="btn btn-secondary btn-xs" id="btn-switch-key" title="Açarı Dəyiş">Çıxış</button>
+        </div>
+
         <button class="btn btn-secondary btn-sm" id="btn-reconnect" title="Yenidən qoşul">🔄 Yenilə</button>
       </div>
     </header>
@@ -251,6 +257,30 @@ Məsələn:
         </div>
       </div>
     </section>
+  </div>
+
+  <!-- API Key Access Modal -->
+  <div class="modal-overlay hidden" id="auth-modal">
+    <div class="modal-card glass-card">
+      <div class="modal-header">
+        <div class="modal-icon">🔑</div>
+        <h3>WhatsApp AI Agent</h3>
+        <p class="modal-desc">Daxil olmaq üçün <strong>API Açarınızı (API Key)</strong> daxil edin. Əgər açar sistemdə yoxdursa, avtomatik <strong>yeni profiliniz</strong> yaradılacaq.</p>
+      </div>
+      <form id="auth-form" class="modal-form">
+        <div class="form-group">
+          <label for="input-api-key"><strong>API Key (Açarınız):</strong></label>
+          <input type="text" id="input-api-key" class="form-input" placeholder="Məs: my-secret-key və ya sk_..." required autocomplete="off">
+          <span class="input-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">
+            İstənilən gizli açar sözü yaza bilərsiniz. Hər açara ayrıca profil bağlanır.
+          </span>
+        </div>
+        <div id="auth-error-msg" class="auth-error hidden" style="color: #f87171; font-size: 12px; margin-bottom: 8px;"></div>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary btn-block" id="btn-auth-submit" style="width: 100%; padding: 12px; font-size: 14px;">Daxil Ol 🚀</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script src="app.js"></script>

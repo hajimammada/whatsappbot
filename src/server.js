@@ -4,19 +4,8 @@ const path = require('path');
 const fs = require('fs');
 
 const waClient = require('./whatsapp_client');
-const { getLeads, updateLeadStatus } = require('./lead_manager');
-const {
-  generateAIResponse,
-  getDocuments,
-  saveDocument,
-  createDocument,
-  setActiveDocument,
-  deleteDocument,
-  getActiveDocument,
-  getAgentSettings
-} = require('./ai_engine');
-
-const HOUSE_PROFILE_PATH = path.join(__dirname, '..', 'config', 'house_profile.json');
+const userManager = require('./user_manager');
+const { generateAIResponse, getAgentSettings } = require('./ai_engine');
 
 function createServer() {
   const app = express();
@@ -41,6 +30,49 @@ function createServer() {
   // Subscribe to WhatsApp client events
   waClient.onEvent((eventType, data) => {
     broadcastSSE(eventType, data);
+  });
+
+  // Auth Middleware:
+  // Extracts API key. If key is in DB -> loads profile; if not -> auto-creates profile!
+  function requireAuth(req, res, next) {
+    const apiKey = req.headers['x-api-key'] || req.query.api_key;
+    if (!apiKey) {
+      return res.status(401).json({ error: 'Giriş üçün API Key tələb olunur' });
+    }
+    try {
+      const { user, isNew } = userManager.getOrCreateUser(apiKey);
+      req.user = user;
+      req.isNew = isNew;
+      next();
+    } catch (err) {
+      return res.status(401).json({ error: err.message });
+    }
+  }
+
+  // Auth API
+  app.post('/api/auth/login', (req, res) => {
+    try {
+      const { apiKey } = req.body;
+      if (!apiKey || !apiKey.trim()) {
+        return res.status(400).json({ error: 'API Key daxil edilməlidir' });
+      }
+      const { user, isNew } = userManager.getOrCreateUser(apiKey);
+      res.json({
+        success: true,
+        isNew,
+        message: isNew
+          ? 'Yeni profil avtomatik yaradıldı və bazaya qeyd olundu!'
+          : 'Mövcud profilinizə uğurla daxil oldunuz!',
+        user: {
+          id: user.id,
+          apiKey: user.apiKey,
+          documentCount: (user.documents || []).length,
+          activeDocumentId: user.activeDocumentId
+        }
+      });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
   });
 
   // SSE stream endpoint
@@ -107,42 +139,70 @@ function createServer() {
     }
   });
 
-// Document Management API (Universal Knowledge Base)
-  app.get('/api/documents', (req, res) => {
+  // Multi-Tenant Document Management API
+  app.get('/api/documents', requireAuth, (req, res) => {
     try {
-      res.json(getDocuments());
+      res.json({
+        activeDocumentId: req.user.activeDocumentId,
+        documents: req.user.documents || []
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.post('/api/documents', (req, res) => {
+  app.post('/api/documents', requireAuth, (req, res) => {
     try {
       const { title, content, makeActive } = req.body;
-      const kb = createDocument(title, content, makeActive);
-      broadcastSSE('documents_updated', getDocuments());
-      res.json({ success: true, message: 'Sənəd uğurla yaradıldı!', knowledgeBase: kb });
+      const updatedUser = userManager.createUserDocument(req.user.apiKey, title, content, makeActive);
+      broadcastSSE('documents_updated', {
+        activeDocumentId: updatedUser.activeDocumentId,
+        documents: updatedUser.documents
+      });
+      res.json({
+        success: true,
+        message: 'Sənəd uğurla yaradıldı!',
+        documents: updatedUser.documents,
+        activeDocumentId: updatedUser.activeDocumentId
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.put('/api/documents/:id', (req, res) => {
+  app.put('/api/documents/:id', requireAuth, (req, res) => {
     try {
       const { title, content, makeActive } = req.body;
-      const kb = saveDocument({ id: req.params.id, title, content, makeActive });
-      broadcastSSE('documents_updated', getDocuments());
-      res.json({ success: true, message: 'Sənəd uğurla yadda saxlanıldı!', knowledgeBase: kb });
+      const updatedUser = userManager.saveUserDocument(req.user.apiKey, {
+        id: req.params.id,
+        title,
+        content,
+        makeActive
+      });
+      broadcastSSE('documents_updated', {
+        activeDocumentId: updatedUser.activeDocumentId,
+        documents: updatedUser.documents
+      });
+      res.json({
+        success: true,
+        message: 'Sənəd uğurla yadda saxlanıldı!',
+        documents: updatedUser.documents,
+        activeDocumentId: updatedUser.activeDocumentId
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.post('/api/documents/:id/activate', (req, res) => {
+  app.post('/api/documents/:id/activate', requireAuth, (req, res) => {
     try {
-      const ok = setActiveDocument(req.params.id);
+      const ok = userManager.setUserActiveDocument(req.user.apiKey, req.params.id);
       if (ok) {
-        broadcastSSE('documents_updated', getDocuments());
+        const user = userManager.getUser(req.user.apiKey);
+        broadcastSSE('documents_updated', {
+          activeDocumentId: user.activeDocumentId,
+          documents: user.documents
+        });
         res.json({ success: true, message: 'Sənəd aktiv baza kimi təyin edildi!' });
       } else {
         res.status(404).json({ error: 'Sənəd tapılmadı' });
@@ -152,29 +212,32 @@ function createServer() {
     }
   });
 
-  app.delete('/api/documents/:id', (req, res) => {
+  app.delete('/api/documents/:id', requireAuth, (req, res) => {
     try {
-      const kb = deleteDocument(req.params.id);
-      broadcastSSE('documents_updated', getDocuments());
-      res.json({ success: true, message: 'Sənəd silindi', knowledgeBase: kb });
+      const updatedUser = userManager.deleteUserDocument(req.user.apiKey, req.params.id);
+      broadcastSSE('documents_updated', {
+        activeDocumentId: updatedUser.activeDocumentId,
+        documents: updatedUser.documents
+      });
+      res.json({
+        success: true,
+        message: 'Sənəd silindi',
+        documents: updatedUser.documents,
+        activeDocumentId: updatedUser.activeDocumentId
+      });
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
   });
 
-  // Backward compatibility endpoint
-  app.get('/api/house-profile', (req, res) => {
-    res.json(getActiveDocument());
+  // Leads API (Profile-specific)
+  app.get('/api/leads', requireAuth, (req, res) => {
+    res.json(req.user.leads || []);
   });
 
-  // Leads API
-  app.get('/api/leads', (req, res) => {
-    res.json(getLeads());
-  });
-
-  app.post('/api/leads/:id/status', (req, res) => {
+  app.post('/api/leads/:id/status', requireAuth, (req, res) => {
     const { status, notes } = req.body;
-    const updated = updateLeadStatus(req.params.id, status, notes);
+    const updated = userManager.updateUserLeadStatus(req.user.apiKey, req.params.id, status, notes);
     if (updated) {
       broadcastSSE('leads_updated', {});
       res.json({ success: true, lead: updated });
@@ -183,18 +246,19 @@ function createServer() {
     }
   });
 
-  // AI Sandbox / Test Simulator
-  app.post('/api/test-ai', async (req, res) => {
+  // AI Sandbox / Test Simulator (Evaluated against User's Active Document)
+  app.post('/api/test-ai', requireAuth, async (req, res) => {
     try {
       const { message } = req.body;
       if (!message) {
         return res.status(400).json({ error: 'Message text is required' });
       }
-      const testContactId = 'test_simulation_user';
-      const aiResponse = await generateAIResponse(testContactId, message);
-      res.json(aiResponse);
+      const testContactId = 'test_simulation_' + req.user.id;
+      const activeDoc = userManager.getUserActiveDocument(req.user);
+      const result = await generateAIResponse(testContactId, message, activeDoc);
+      res.json(result);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'AI Error: ' + err.message });
     }
   });
 

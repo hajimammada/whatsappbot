@@ -231,8 +231,8 @@ function fallbackRuleEngine(incomingMessage, activeDoc) {
   };
 }
 
-async function generateAIResponse(contactId, incomingMessage) {
-  const activeDoc = getActiveDocument();
+async function generateAIResponse(contactId, incomingMessage, customActiveDoc = null) {
+  const activeDoc = customActiveDoc || getActiveDocument();
   const agentSettings = getAgentSettings();
   const history = getChatHistory(contactId);
 

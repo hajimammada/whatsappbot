@@ -1,4 +1,4 @@
-// Client-side Application Logic for WhatsApp Real Estate Agent
+// Client-side Application Logic for WhatsApp AI Agent with Multi-Tenant API Key Auth
 
 document.addEventListener('DOMContentLoaded', () => {
   // Navigation Tabs
@@ -23,7 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const autoReplyToggle = document.getElementById('auto-reply-toggle');
   const autoReplyLabel = document.getElementById('auto-reply-label');
   const btnReconnect = document.getElementById('btn-reconnect');
-  const btnLogout = document.getElementById('btn-logout');
 
   const qrContainer = document.getElementById('qr-container');
   const qrImageWrapper = document.getElementById('qr-image-wrapper');
@@ -59,13 +58,121 @@ document.addEventListener('DOMContentLoaded', () => {
   const simDebugJson = document.getElementById('sim-debug-json');
   const quickButtons = document.querySelectorAll('.quick-btn');
 
+  // Auth UI Elements
+  const authModal = document.getElementById('auth-modal');
+  const authForm = document.getElementById('auth-form');
+  const inputApiKey = document.getElementById('input-api-key');
+  const authErrorMsg = document.getElementById('auth-error-msg');
+  const activeApiKeyDisplay = document.getElementById('active-api-key-display');
+  const btnSwitchKey = document.getElementById('btn-switch-key');
+
+  let currentApiKey = localStorage.getItem('wa_api_key') || null;
   let documents = [];
   let activeDocumentId = null;
   let selectedDocumentId = null;
   let totalMessagesCount = 0;
   let chatStatuses = {}; // phone -> { isPaused, remainingMinutes }
 
-  // 1. Initialize Server-Sent Events (SSE)
+  // -----------------------------------------------------------------
+  // 1. Authentication & Session Handling
+  // -----------------------------------------------------------------
+  function showAuthModal(errMsg = '') {
+    if (authModal) authModal.classList.remove('hidden');
+    if (authErrorMsg) {
+      if (errMsg) {
+        authErrorMsg.textContent = errMsg;
+        authErrorMsg.classList.remove('hidden');
+      } else {
+        authErrorMsg.classList.add('hidden');
+      }
+    }
+    if (inputApiKey) {
+      inputApiKey.value = currentApiKey || '';
+      setTimeout(() => inputApiKey.focus(), 100);
+    }
+  }
+
+  function hideAuthModal() {
+    if (authModal) authModal.classList.add('hidden');
+    if (authErrorMsg) authErrorMsg.classList.add('hidden');
+  }
+
+  function updateSessionDisplay(key) {
+    if (activeApiKeyDisplay && key) {
+      const masked = key.length > 8 ? key.substring(0, 4) + '...' + key.substring(key.length - 3) : key;
+      activeApiKeyDisplay.textContent = masked;
+      activeApiKeyDisplay.title = 'Açar: ' + key;
+    }
+  }
+
+  async function authFetch(url, options = {}) {
+    if (!currentApiKey) {
+      showAuthModal();
+      throw new Error('API Key tələb olunur');
+    }
+    options.headers = options.headers || {};
+    if (options.body && typeof options.body === 'string' && !options.headers['Content-Type']) {
+      options.headers['Content-Type'] = 'application/json';
+    }
+    options.headers['X-API-Key'] = currentApiKey;
+
+    const res = await fetch(url, options);
+    if (res.status === 401) {
+      showAuthModal('Sessiya xətası: API Key yanlışdır və ya tapılmadı.');
+      throw new Error('Unauthorized');
+    }
+    return res;
+  }
+
+  if (authForm) {
+    authForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const key = inputApiKey.value.trim();
+      if (!key) return;
+
+      const btn = document.getElementById('btn-auth-submit');
+      btn.disabled = true;
+      btn.textContent = 'Yoxlanılır...';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey: key })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Giriş uğursuz oldu');
+
+        currentApiKey = key;
+        localStorage.setItem('wa_api_key', key);
+        updateSessionDisplay(key);
+        hideAuthModal();
+
+        // Boot user profile data
+        await loadDocuments();
+        await loadLeads();
+        await fetchStatus();
+      } catch (err) {
+        if (authErrorMsg) {
+          authErrorMsg.textContent = err.message;
+          authErrorMsg.classList.remove('hidden');
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Daxil Ol 🚀';
+      }
+    });
+  }
+
+  if (btnSwitchKey) {
+    btnSwitchKey.addEventListener('click', () => {
+      showAuthModal();
+    });
+  }
+
+  // -----------------------------------------------------------------
+  // 2. Initialize Server-Sent Events (SSE)
+  // -----------------------------------------------------------------
   function initSSE() {
     const eventSource = new EventSource('/api/events');
 
@@ -91,13 +198,13 @@ document.addEventListener('DOMContentLoaded', () => {
       updateConnectionStatus(data);
     } else if (type === 'chat_status_updated') {
       chatStatuses[data.phone] = data;
-      loadLeads(); // re-render table with updated status
+      if (currentApiKey) loadLeads();
     } else if (type === 'qr_generated') {
       renderQR(data.qrCodeDataUrl);
     } else if (type === 'new_message') {
       appendMessageToFeed(data);
     } else if (type === 'leads_updated') {
-      loadLeads();
+      if (currentApiKey) loadLeads();
     } else if (type === 'documents_updated') {
       if (data.documents) {
         documents = data.documents;
@@ -139,64 +246,38 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (status === 'connecting') {
       statusText.textContent = 'Qoşulur...';
       waStateBadge.textContent = 'Qoşulur...';
-    } else {
-      statusText.textContent = 'Qoşulmayıb';
-      waStateBadge.textContent = 'Bağlantı kəsildi';
       waStateBadge.className = 'badge';
       qrContainer.classList.remove('hidden');
       connectedInfo.classList.add('hidden');
-    }
-
-    if (data.autoReplyEnabled !== undefined) {
-      autoReplyToggle.checked = data.autoReplyEnabled;
-      updateAutoReplyLabel(data.autoReplyEnabled);
+      qrImageWrapper.innerHTML = `<div class="spinner"></div><p class="qr-hint">WhatsApp serverinə bağlanır...</p>`;
+    } else {
+      statusText.textContent = 'Bağlantı kəsildi';
+      waStateBadge.textContent = 'Offline';
+      waStateBadge.className = 'badge badge-danger';
+      qrContainer.classList.remove('hidden');
+      connectedInfo.classList.add('hidden');
+      qrImageWrapper.innerHTML = `<p style="color: var(--danger-color); padding: 20px;">Bağlantı kəsildi. "🔄 Yenilə" düyməsini sıxın.</p>`;
     }
   }
 
   function renderQR(dataUrl) {
-    if (!dataUrl) return;
-    qrImageWrapper.innerHTML = `<img src="${dataUrl}" alt="WhatsApp QR Code">`;
-  }
-
-  function updateAutoReplyLabel(enabled) {
-    autoReplyLabel.textContent = enabled ? 'Avto-Cavab: Aktiv' : 'Avto-Cavab: Dayandırılıb';
-  }
-
-  // 2. Fetch Initial Data
-  async function fetchStatus() {
-    try {
-      const res = await fetch('/api/status');
-      const data = await res.json();
-      updateConnectionStatus(data);
-      if (data.recentMessages) {
-        messagesFeed.innerHTML = '';
-        data.recentMessages.forEach(appendMessageToFeed);
-      }
-    } catch (e) {
-      console.error('Failed to fetch status:', e);
-    }
+    qrImageWrapper.innerHTML = `
+      <img src="${dataUrl}" alt="WhatsApp QR Code">
+      <p class="qr-hint">QR kodu skan edin</p>
+    `;
   }
 
   function appendMessageToFeed(msg) {
     totalMessagesCount++;
     statTotalMessages.textContent = totalMessagesCount;
 
-    // Remove placeholder if present
-    const emptyPlaceholder = messagesFeed.querySelector('.empty-feed-placeholder');
-    if (emptyPlaceholder) emptyPlaceholder.remove();
-
     const div = document.createElement('div');
-    const isIncoming = msg.direction === 'incoming';
-    div.className = `feed-item ${isIncoming ? 'incoming' : 'outgoing'}`;
-
-    const timeStr = new Date(msg.timestamp || Date.now()).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' });
-    const headerTitle = isIncoming
-      ? `📩 +${msg.from} (${msg.name || 'tap.az'})`
-      : `🤖 AI Cavab ➔ +${msg.to}`;
+    div.className = `feed-item ${msg.direction}`;
+    const timeStr = new Date(msg.timestamp).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' });
 
     div.innerHTML = `
       <div class="feed-meta">
-        <strong>${headerTitle}</strong>
+        <strong>${escapeHtml(msg.direction === 'incoming' ? (msg.name || msg.from) : 'AI Bot')}</strong>
         <span>${timeStr}</span>
       </div>
       <div class="feed-text">${escapeHtml(msg.text)}</div>
@@ -206,10 +287,13 @@ document.addEventListener('DOMContentLoaded', () => {
     messagesFeed.scrollTop = messagesFeed.scrollHeight;
   }
 
+  // -----------------------------------------------------------------
   // 3. Document Management (Universal Knowledge Base)
+  // -----------------------------------------------------------------
   async function loadDocuments() {
+    if (!currentApiKey) return;
     try {
-      const res = await fetch('/api/documents');
+      const res = await authFetch('/api/documents');
       const data = await res.json();
       documents = data.documents || [];
       activeDocumentId = data.activeDocumentId;
@@ -297,9 +381,8 @@ document.addEventListener('DOMContentLoaded', () => {
       };
 
       try {
-        const res = await fetch(`/api/documents/${selectedDocumentId}`, {
+        const res = await authFetch(`/api/documents/${selectedDocumentId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
         const data = await res.json();
@@ -317,9 +400,8 @@ document.addEventListener('DOMContentLoaded', () => {
     btnNewDoc.addEventListener('click', async () => {
       btnNewDoc.textContent = 'Yaradılır...';
       try {
-        const res = await fetch('/api/documents', {
+        const res = await authFetch('/api/documents', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: 'Yeni Sənəd ' + (documents.length + 1),
             content: '',
@@ -352,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!confirm(`"${doc?.title || 'Bu sənədi'}" silmək istədiyinizə əminsiniz?`)) return;
 
       try {
-        await fetch(`/api/documents/${selectedDocumentId}`, { method: 'DELETE' });
+        await authFetch(`/api/documents/${selectedDocumentId}`, { method: 'DELETE' });
         selectedDocumentId = null;
         await loadDocuments();
       } catch (e) {
@@ -361,12 +443,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // -----------------------------------------------------------------
   // 4. Leads Management
+  // -----------------------------------------------------------------
   async function loadLeads() {
+    if (!currentApiKey) return;
     try {
       const [leadsRes, statusRes] = await Promise.all([
-        fetch('/api/leads'),
-        fetch('/api/chat-statuses')
+        authFetch('/api/leads'),
+        authFetch('/api/chat-statuses')
       ]);
       const leads = await leadsRes.json();
       chatStatuses = await statusRes.json();
@@ -457,7 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const phone = btn.getAttribute('data-phone');
         btn.textContent = '...';
         try {
-          await fetch(`/api/chat/${phone}/resume`, { method: 'POST' });
+          await authFetch(`/api/chat/${phone}/resume`, { method: 'POST' });
           await loadLeads();
         } catch (e) {
           console.error(e);
@@ -470,9 +555,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const phone = btn.getAttribute('data-phone');
         btn.textContent = '...';
         try {
-          await fetch(`/api/chat/${phone}/pause`, {
+          await authFetch(`/api/chat/${phone}/pause`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ minutes: 300 })
           });
           await loadLeads();
@@ -483,16 +567,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  btnRefreshLeads.addEventListener('click', loadLeads);
+  if (btnRefreshLeads) {
+    btnRefreshLeads.addEventListener('click', loadLeads);
+  }
 
+  // -----------------------------------------------------------------
   // 5. Controls
+  // -----------------------------------------------------------------
   autoReplyToggle.addEventListener('change', async () => {
     const isChecked = autoReplyToggle.checked;
     updateAutoReplyLabel(isChecked);
     try {
-      await fetch('/api/auto-reply', {
+      await authFetch('/api/auto-reply', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: isChecked })
       });
     } catch (e) {
@@ -500,36 +587,55 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  function updateAutoReplyLabel(enabled) {
+    autoReplyLabel.textContent = enabled ? 'Avto-Cavab: Aktiv' : 'Avto-Cavab: Deaktiv';
+    autoReplyLabel.style.color = enabled ? 'var(--primary-color)' : 'var(--text-muted)';
+  }
+
   btnReconnect.addEventListener('click', async () => {
+    btnReconnect.disabled = true;
     btnReconnect.textContent = 'Qoşulur...';
     try {
-      await fetch('/api/whatsapp/reconnect', { method: 'POST' });
+      await authFetch('/api/whatsapp/reconnect', { method: 'POST' });
+    } catch (e) {
+      alert('Yenidən qoşulma xətası: ' + e.message);
     } finally {
-      setTimeout(() => { btnReconnect.textContent = '🔄 Yenilə'; }, 1500);
+      setTimeout(() => {
+        btnReconnect.disabled = false;
+        btnReconnect.textContent = '🔄 Yenilə';
+      }, 3000);
     }
   });
 
-  btnLogout.addEventListener('click', async () => {
-    if (confirm('WhatsApp hesabından çıxış etmək istədiyinizə əminsiniz?')) {
-      await fetch('/api/whatsapp/logout', { method: 'POST' });
+  async function fetchStatus() {
+    try {
+      const res = await authFetch('/api/status');
+      const data = await res.json();
+      updateConnectionStatus(data);
+      if (data.autoReplyEnabled !== undefined) {
+        autoReplyToggle.checked = data.autoReplyEnabled;
+        updateAutoReplyLabel(data.autoReplyEnabled);
+      }
+    } catch (err) {
+      console.error('Error fetching initial status:', err);
     }
-  });
+  }
 
+  // -----------------------------------------------------------------
   // 6. AI Simulator Sandbox
+  // -----------------------------------------------------------------
   async function sendSimMessage(text) {
-    const msg = text.trim();
+    const msg = text || simInput.value.trim();
     if (!msg) return;
 
-    // Append user bubble
     appendSimBubble('user', msg);
     simInput.value = '';
     btnSimSend.disabled = true;
-    btnSimSend.textContent = '...';
+    btnSimSend.textContent = 'Düşünür... ⏳';
 
     try {
-      const res = await fetch('/api/test-ai', {
+      const res = await authFetch('/api/test-ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg })
       });
       const data = await res.json();
@@ -581,9 +687,18 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/'/g, '&#039;');
   }
 
-  // Initial Boot
+  // -----------------------------------------------------------------
+  // 7. Initial Boot Flow
+  // -----------------------------------------------------------------
   initSSE();
-  fetchStatus();
-  loadDocuments();
-  loadLeads();
+
+  if (currentApiKey) {
+    updateSessionDisplay(currentApiKey);
+    hideAuthModal();
+    loadDocuments();
+    loadLeads();
+    fetchStatus();
+  } else {
+    showAuthModal();
+  }
 });
