@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { validateGeminiApiKey } = require('./ai_engine');
 
 const USERS_DB_PATH = path.join(__dirname, '..', 'data', 'users_db.json');
 const KNOWLEDGE_BASE_PATH = path.join(__dirname, '..', 'config', 'knowledge_base.json');
@@ -11,56 +12,47 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+function getInitialDocuments() {
+  if (fs.existsSync(KNOWLEDGE_BASE_PATH)) {
+    try {
+      const kb = JSON.parse(fs.readFileSync(KNOWLEDGE_BASE_PATH, 'utf-8'));
+      if (kb.documents && kb.documents.length > 0) {
+        return {
+          documents: kb.documents,
+          activeDocumentId: kb.activeDocumentId || kb.documents[0].id
+        };
+      }
+    } catch (e) {
+      console.warn('Could not read existing knowledge base:', e);
+    }
+  }
+
+  const defaultDoc = {
+    id: 'doc_' + Date.now(),
+    title: 'Məlumat Sənədi / Knowledge Base',
+    content: `Bura AI botun cavablandırmasını istədiyiniz bütün məlumatları sərbəst şəkildə yazın.`,
+    updatedAt: new Date().toISOString()
+  };
+  return { documents: [defaultDoc], activeDocumentId: defaultDoc.id };
+}
+
 function loadUsersDb() {
   try {
     if (!fs.existsSync(USERS_DB_PATH)) {
       const initialDb = { users: {} };
-      
-      // Auto-migrate existing single-user data to master profile
-      let initialDocs = [];
-      let initialActiveDocId = null;
-      if (fs.existsSync(KNOWLEDGE_BASE_PATH)) {
-        try {
-          const kb = JSON.parse(fs.readFileSync(KNOWLEDGE_BASE_PATH, 'utf-8'));
-          initialDocs = kb.documents || [];
-          initialActiveDocId = kb.activeDocumentId || (initialDocs[0] && initialDocs[0].id);
-        } catch (e) {
-          console.warn('Could not read existing knowledge base:', e);
-        }
-      }
-
-      let initialLeads = [];
-      if (fs.existsSync(LEADS_PATH)) {
-        try {
-          initialLeads = JSON.parse(fs.readFileSync(LEADS_PATH, 'utf-8'));
-        } catch (e) {
-          console.warn('Could not read existing leads:', e);
-        }
-      }
-
-      // Default master key (user can use "master" or custom key)
-      const masterKey = process.env.MASTER_API_KEY || 'master';
-      initialDb.users[masterKey] = {
-        id: 'user_master',
-        apiKey: masterKey,
-        isMaster: true,
-        createdAt: new Date().toISOString(),
-        lastActiveAt: new Date().toISOString(),
-        documents: initialDocs,
-        activeDocumentId: initialActiveDocId,
-        leads: initialLeads,
-        settings: {
-          human_takeover_minutes: 300,
-          auto_reply_enabled: true
-        }
-      };
-
       fs.writeFileSync(USERS_DB_PATH, JSON.stringify(initialDb, null, 2), 'utf-8');
       return initialDb;
     }
 
     const raw = fs.readFileSync(USERS_DB_PATH, 'utf-8');
-    return JSON.parse(raw);
+    const db = JSON.parse(raw);
+    
+    // Ensure no legacy master bypass key
+    if (db.users && db.users['master']) {
+      delete db.users['master'];
+      fs.writeFileSync(USERS_DB_PATH, JSON.stringify(db, null, 2), 'utf-8');
+    }
+    return db;
   } catch (err) {
     console.error('Error loading users DB:', err);
     return { users: {} };
@@ -77,16 +69,12 @@ function saveUsersDb(db) {
   }
 }
 
-const { validateGeminiApiKey } = require('./ai_engine');
-
-// If API key is in database -> returns existing profile
-// If API key is NOT in database:
-//   1. Validates key live against Google Gemini API
-//   2. If invalid -> throws error, NO profile created
-//   3. If valid -> system auto-creates a new profile and saves it
+// Strictly requires a valid Google Gemini API Key
+// If key is in DB -> loads existing profile
+// If key is NOT in DB -> validates with Google Gemini API live; if valid, auto-creates profile
 async function getOrCreateUser(apiKey) {
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
-    throw new Error('Google Gemini API Key tələb olunur');
+    throw new Error('Google Gemini API Key tələb olunur / Google Gemini API Key required');
   }
 
   const cleanKey = apiKey.trim();
@@ -99,7 +87,7 @@ async function getOrCreateUser(apiKey) {
     return { user: db.users[cleanKey], isNew: false };
   }
 
-  // 2. If NOT in database -> Test against Google Gemini API!
+  // 2. Validate live against Google Gemini API
   const validation = await validateGeminiApiKey(cleanKey);
   if (!validation.valid) {
     throw new Error(validation.error || 'Daxil edilən Google Gemini API Key etibarsızdır. Zəhmət olmasa aistudio.google.com-dan düzgün açar daxil edin.');
@@ -108,27 +96,15 @@ async function getOrCreateUser(apiKey) {
   // 3. Valid key -> system automatically creates new profile and saves in DB
   const newUserId = 'usr_' + Date.now();
   const now = new Date().toISOString();
-
-  const defaultDoc = {
-    id: 'doc_' + Date.now(),
-    title: 'Məlumat Sənədi',
-    content: `Bura AI botun müştərilərə cavab verməsi üçün bilməsini istədiyiniz bütün məlumatları sərbəst şəkildə yazın.
-
-Məsələn:
-- Satılan məhsul / mənzil / avtomobil və ya təqdim olunan xidmət
-- Qiymətlər, ödəniş şərtləri və endirim siyasəti
-- Ünvan, iş saatları və əlaqə qaydaları
-- Müştərilərin ən çox verdiyi suallar və onların dəqiq cavabları`,
-    updatedAt: now
-  };
+  const initial = getInitialDocuments();
 
   const newUser = {
     id: newUserId,
     apiKey: cleanKey,
     createdAt: now,
     lastActiveAt: now,
-    documents: [defaultDoc],
-    activeDocumentId: defaultDoc.id,
+    documents: initial.documents,
+    activeDocumentId: initial.activeDocumentId,
     leads: [],
     settings: {
       human_takeover_minutes: 300,
@@ -138,7 +114,7 @@ Məsələn:
 
   db.users[cleanKey] = newUser;
   saveUsersDb(db);
-  console.log(`✨ Yeni profil avtomatik yaradıldı və bazaya qeyd olundu: API Key = "${cleanKey}"`);
+  console.log(`✨ Yeni profil avtomatik yaradıldı və bazaya qeyd olundu: API Key = "${cleanKey.substring(0, 8)}..."`);
   return { user: newUser, isNew: true };
 }
 
@@ -150,7 +126,7 @@ function getUser(apiKey) {
 
 function getUserActiveDocument(user) {
   if (!user || !user.documents || user.documents.length === 0) {
-    return { id: 'default', title: 'Ümumi Baza', content: '' };
+    return { id: 'default', title: 'Data', content: '' };
   }
   const active = user.documents.find(d => d.id === user.activeDocumentId);
   return active || user.documents[0];
@@ -219,7 +195,7 @@ function deleteUserDocument(apiKey, docId) {
 
   user.documents = user.documents || [];
   if (user.documents.length <= 1) {
-    throw new Error('Ən azı 1 sənəd qalmalıdır. Yeganə sənədi silə bilməzsiniz.');
+    throw new Error('Ən azı 1 sənəd qalmalıdır.');
   }
 
   user.documents = user.documents.filter(d => d.id !== docId);

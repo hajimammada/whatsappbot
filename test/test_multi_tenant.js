@@ -23,13 +23,16 @@ async function runMultiTenantTests() {
   );
   console.log('✅ getOrCreateUser blocked fake key and refused to create profile.\n');
 
-  // Test 2: Master Key allows owner to log in
-  console.log('Test 2: Verifying Master Profile for server owner...');
-  const masterKey = process.env.MASTER_API_KEY || 'master';
-  const { user: masterUser, isNew: masterIsNew } = await userManager.getOrCreateUser(masterKey);
-  assert(masterUser, 'Master user must exist');
-  assert(masterUser.documents.length > 0, 'Master user must contain documents');
-  console.log(`✅ Master Profile: Key="${masterKey}", Docs=${masterUser.documents.length}, Active="${masterUser.documents[0].title}"\n`);
+  // Test 2: 'master' or backdoor string is REJECTED (no master profile backdoor)
+  console.log('Test 2: Verifying that backdoor "master" string is rejected...');
+  await assert.rejects(
+    async () => {
+      await userManager.getOrCreateUser('master');
+    },
+    /API Key formatı yanlışdır|etibarsızdır/,
+    'getOrCreateUser must reject "master" as an invalid Gemini key'
+  );
+  console.log('✅ Backdoor "master" key correctly rejected — pure BYOK enforced.\n');
 
   // Test 3: Real Gemini API Key from .env is Validated and creates profile
   console.log('Test 3: Testing live validation of real Gemini API Key from .env...');

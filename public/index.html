@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>tap.az WhatsApp Real Estate AI Agent</title>
+  <title>WhatsApp AI Agent</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,20 +11,27 @@
 </head>
 <body>
   <div class="app-container">
-    <!-- Top Navigation Bar -->
+    <!-- Top Navigation Ribbon -->
     <header class="navbar">
       <div class="brand">
-        <div class="brand-icon">🏡</div>
+        <div class="brand-icon">🤖</div>
         <div class="brand-text">
-          <h1>tap.az AI Agent</h1>
-          <span class="badge-subtitle">Real Estate WhatsApp Automation</span>
+          <h1 data-i18n="brand_title">WhatsApp AI Bot</h1>
         </div>
       </div>
 
       <div class="nav-controls">
+        <!-- Language Switcher in Top Ribbon -->
+        <div class="lang-switch" id="lang-switch">
+          <span class="lang-globe">🌐</span>
+          <button class="lang-btn active" data-lang="az">AZ</button>
+          <button class="lang-btn" data-lang="ru">RU</button>
+          <button class="lang-btn" data-lang="en">EN</button>
+        </div>
+
         <div class="connection-pill" id="conn-pill">
           <span class="status-dot disconnected" id="status-dot"></span>
-          <span class="status-text" id="status-text">Qoşulur...</span>
+          <span class="status-text" id="status-text" data-i18n="status_connecting">Qoşulur...</span>
         </div>
 
         <div class="toggle-wrapper">
@@ -32,49 +39,41 @@
             <input type="checkbox" id="auto-reply-toggle" checked>
             <span class="slider round"></span>
           </label>
-          <span class="toggle-label" id="auto-reply-label">Avto-Cavab: Aktiv</span>
+          <span class="toggle-label" id="auto-reply-label" data-i18n="auto_reply_on">Avto-Cavab: Aktiv</span>
         </div>
 
         <div class="user-session-pill" id="user-session-pill">
           <span class="key-icon">🔑</span>
           <span class="key-text" id="active-api-key-display">---</span>
-          <button class="btn btn-secondary btn-xs" id="btn-switch-key" title="Açarı Dəyiş">Çıxış</button>
+          <button class="btn btn-secondary btn-xs" id="btn-switch-key" data-i18n="logout">Çıxış</button>
         </div>
 
-        <button class="btn btn-secondary btn-sm" id="btn-reconnect" title="Yenidən qoşul">🔄 Yenilə</button>
+        <button class="btn btn-secondary btn-sm" id="btn-reconnect" title="Reconnect" data-i18n="reconnect">🔄 Yenilə</button>
       </div>
     </header>
 
-    <!-- Main Navigation Tabs -->
+    <!-- Simplified Main Navigation Tabs -->
     <nav class="nav-tabs">
-      <button class="tab-btn active" data-tab="tab-overview">📊 İdarəetmə Paneli & QR</button>
-      <button class="tab-btn" data-tab="tab-leads">👥 Alıcılar & Görüşlər <span class="tab-badge" id="leads-count">0</span></button>
-      <button class="tab-btn" data-tab="tab-profile">📚 Bilik Bazası & Sənədlər</button>
-      <button class="tab-btn" data-tab="tab-simulator">🧪 AI Sınaq Qutusu</button>
+      <button class="tab-btn active" data-tab="tab-overview" data-i18n="tab_connect">Connect</button>
+      <button class="tab-btn" data-tab="tab-leads"><span data-i18n="tab_messages">Messages</span> <span class="tab-badge" id="leads-count">0</span></button>
+      <button class="tab-btn" data-tab="tab-profile" data-i18n="tab_data">Data</button>
+      <button class="tab-btn" data-tab="tab-simulator" data-i18n="tab_test">Test</button>
     </nav>
 
-    <!-- Tab 1: Overview & WhatsApp Connection -->
+    <!-- Tab 1: Connect -->
     <section class="tab-content active" id="tab-overview">
       <div class="grid-2col">
         <!-- Left: WhatsApp Connection / QR Box -->
         <div class="card glass-card qr-card">
           <div class="card-header">
-            <h3>📱 WhatsApp Qoşulması</h3>
-            <span class="badge" id="wa-state-badge">Gözlənilir</span>
+            <h3 data-i18n="wa_header">WhatsApp Qoşulması</h3>
+            <span class="badge" id="wa-state-badge">...</span>
           </div>
           
           <div class="qr-container" id="qr-container">
             <div class="qr-box" id="qr-image-wrapper">
               <div class="spinner"></div>
-              <p class="qr-hint">QR kod hazırlanır...</p>
-            </div>
-            <div class="qr-instructions">
-              <h4>Necə qoşulmalı:</h4>
-              <ol>
-                <li>Telefonunuzda <strong>WhatsApp</strong> tətbiqini açın.</li>
-                <li><strong>Parametrlər</strong> &rarr; <strong>Əlaqəli Cihazlar</strong> (Linked Devices) bölməsinə keçin.</li>
-                <li><strong>Cihaz bağla</strong> (Link a Device) seçib bu QR kodu skan edin.</li>
-              </ol>
+              <p class="qr-hint" data-i18n="qr_hint">WhatsApp ilə QR kodu skan edin</p>
             </div>
           </div>
 
@@ -82,75 +81,72 @@
             <div class="connected-badge-large">
               <div class="icon-check">✅</div>
               <div>
-                <h4 id="user-display-name">WhatsApp Hesabı Bağlandı</h4>
+                <h4 id="user-display-name">WhatsApp</h4>
                 <p id="user-display-jid">+994XXXXXXXXX</p>
               </div>
             </div>
-            <p class="connected-desc">Bot aktivdir və tap.az-dan gələn sualları avtomatik cavablandırır.</p>
-            <button class="btn btn-danger btn-sm" id="btn-logout">Hesabdan çıxış et</button>
+            <button class="btn btn-danger btn-sm" id="btn-logout" data-i18n="logout">Çıxış et</button>
           </div>
         </div>
 
-        <!-- Right: Real-time Stats & Recent Messages -->
+        <!-- Right: Live Messages Feed -->
         <div class="card glass-card">
           <div class="card-header">
-            <h3>💬 Canlı Mesajlar & Əməliyyatlar</h3>
-            <span class="live-dot-pulse">● CANLI</span>
+            <h3 data-i18n="live_feed">Canlı Mesajlar</h3>
+            <span class="live-dot-pulse">● LIVE</span>
           </div>
 
           <div class="stats-mini-row">
             <div class="mini-stat">
               <span class="stat-number" id="stat-total-messages">0</span>
-              <span class="stat-title">Gələn Suallar</span>
+              <span class="stat-title" data-i18n="stat_questions">Suallar</span>
             </div>
             <div class="mini-stat">
               <span class="stat-number" id="stat-leads-count">0</span>
-              <span class="stat-title">Qeydə Alınan Alıcılar</span>
+              <span class="stat-title" data-i18n="stat_leads">Müştərilər</span>
             </div>
             <div class="mini-stat">
               <span class="stat-number" id="stat-viewings-count">0</span>
-              <span class="stat-title">Baxış İstəkləri</span>
+              <span class="stat-title" data-i18n="stat_appointments">Görüşlər</span>
             </div>
           </div>
 
           <div class="messages-feed" id="messages-feed">
             <div class="empty-feed-placeholder">
-              <p>Hələ ki yeni mesaj daxil olmayıb.</p>
-              <span class="subtext">WhatsApp qoşulduqdan sonra mesajlar burada real-vaxtda görünəcək.</span>
+              <p data-i18n="empty_feed">Hələ yeni mesaj yoxdur</p>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Tab 2: Leads & Viewing Appointments -->
+    <!-- Tab 2: Messages -->
     <section class="tab-content" id="tab-leads">
       <div class="card glass-card">
         <div class="card-header">
           <div>
-            <h3>👥 Potensial Alıcılar və Ev Baxışı İstəkləri</h3>
-            <p class="card-desc">Süni intellekt tərəfindən aşkar edilmiş ciddi alıcılar və onların seçdiyi vaxtlar.</p>
+            <h3 data-i18n="tab_messages">Messages</h3>
           </div>
-          <button class="btn btn-secondary btn-sm" id="btn-refresh-leads">🔄 Yenilə</button>
+          <button class="btn btn-secondary btn-sm" id="btn-refresh-leads">🔄</button>
         </div>
 
         <div class="leads-table-wrapper">
           <table class="leads-table" id="leads-table">
             <thead>
               <tr>
-                <th>Alıcı / Nömrə</th>
-                <th>Müraciət Növü</th>
-                <th>Maraq</th>
-                <th>İstədiyi Vaxt</th>
-                <th>Bot Statusu (Takeover)</th>
-                <th>Son Mesaj</th>
-                <th>Tarix</th>
-                <th>Əməliyyat</th>
+                <th data-i18n="tbl_contact">Alıcı / Nömrə</th>
+                <th data-i18n="tbl_type">Müraciət</th>
+                <th data-i18n="tbl_interest">Maraq</th>
+                <th data-i18n="tbl_time">İstədiyi Vaxt</th>
+                <th data-i18n="tbl_status">Bot Statusu</th>
+                <th data-i18n="tbl_last_msg">Son Mesaj</th>
+                <th data-i18n="tbl_date">Tarix</th>
+                <th data-i18n="tbl_action">Əlaqə</th>
               </tr>
             </thead>
             <tbody id="leads-tbody">
               <tr>
-                <td colspan="8" class="text-center">Hələ qeydə alınmış alıcı yoxdur.</td>
+                <td colspan="8" class="text-center" data-i18n="no_leads">Hələ qeydə alınmış alıcı yoxdur.</td>
               </tr>
             </tbody>
           </table>
@@ -158,17 +154,16 @@
       </div>
     </section>
 
-    <!-- Tab 3: Universal Knowledge Base & Document Manager -->
+    <!-- Tab 3: Data -->
     <section class="tab-content" id="tab-profile">
       <div class="card glass-card">
         <div class="card-header">
           <div>
-            <h3>📚 Bilik Bazası və Sənədlər (Universal Knowledge Base)</h3>
-            <p class="card-desc">Botun istifadə edəcəyi məlumatları bura daxil edin. İstədiyiniz mövzuda (ev, maşın, xidmət, FAQ) sənəd yarada və asanlıqla dəyişə bilərsiniz.</p>
+            <h3 data-i18n="tab_data">Data</h3>
           </div>
           <div class="doc-header-actions">
-            <button class="btn btn-secondary" id="btn-new-doc">➕ Yeni Sənəd Yarat</button>
-            <button class="btn btn-primary" id="btn-save-doc">💾 Yadda Saxla</button>
+            <button class="btn btn-secondary" id="btn-new-doc" data-i18n="btn_new_doc">➕ Yeni Sənəd</button>
+            <button class="btn btn-primary" id="btn-save-doc" data-i18n="btn_save_doc">💾 Yadda Saxla</button>
           </div>
         </div>
 
@@ -176,83 +171,66 @@
           <!-- Left Column: Document List -->
           <div class="doc-sidebar">
             <div class="doc-sidebar-header">
-              <h4>📑 Sənədləriniz</h4>
-              <span class="badge" id="docs-count-badge">1 sənəd</span>
+              <h4 data-i18n="docs_header">Sənədlər</h4>
+              <span class="badge" id="docs-count-badge">1</span>
             </div>
             <div class="doc-list" id="doc-list">
-              <!-- Dynamically populated document items -->
+              <!-- Dynamically populated -->
             </div>
           </div>
 
           <!-- Right Column: Document Editor -->
           <div class="doc-editor">
             <div class="doc-form-group">
-              <label for="doc-title-input"><strong>Sənədin Başlığı:</strong></label>
-              <input type="text" id="doc-title-input" class="form-input" placeholder="Məs: Sumqayıt Ev Satışı, Avtomobil Satışı, Şirkət FAQ...">
+              <label for="doc-title-input"><strong data-i18n="doc_title_label">Sənədin Başlığı:</strong></label>
+              <input type="text" id="doc-title-input" class="form-input" data-i18n-ph="doc_title_ph" placeholder="Məs: Ev Satışı, Avtomobil, Xidmət...">
             </div>
 
             <div class="doc-form-group">
               <div class="editor-label-row">
-                <label for="doc-content-textarea"><strong>Məlumat Mətni (Bilik Bazası):</strong></label>
+                <label for="doc-content-textarea"><strong data-i18n="doc_content_label">Məlumat Mətni:</strong></label>
                 <div class="editor-stats">
-                  <span id="doc-char-count">0 simvol</span> • <span id="doc-word-count">0 söz</span>
+                  <span id="doc-char-count">0</span> • <span id="doc-word-count">0</span>
                 </div>
               </div>
-              <textarea id="doc-content-textarea" class="form-input doc-textarea" rows="16" placeholder="Bura AI botun bilməsini və müştərilərə cavab verməsini istədiyiniz bütün məlumatları sərbəst şəkildə yazın və ya yapışdırın...
-
-Məsələn:
-- Satılan əşya/mənzil/avtomobil haqqında məlumatlar
-- Qiymət və ödəniş şərtləri
-- Ünvan, əlaqə və görüş/baxış vaxtları
-- Tez-tez verilən suallar və onların dəqiq cavabları"></textarea>
+              <textarea id="doc-content-textarea" class="form-input doc-textarea" rows="16" data-i18n-ph="doc_content_ph" placeholder="Bura AI botun cavablandırmasını istədiyiniz bütün məlumatları sərbəst şəkildə yazın..."></textarea>
             </div>
 
             <div class="doc-bottom-bar">
               <label class="doc-active-toggle-label">
                 <input type="checkbox" id="doc-is-active-checkbox">
-                <span>⭐ Bu sənədi WhatsApp üçün <strong>Aktiv Bilik Bazası</strong> təyin et</span>
+                <span data-i18n="doc_active_toggle">⭐ Bu sənədi WhatsApp üçün Aktiv Baza təyin et</span>
               </label>
 
-              <button class="btn btn-danger btn-sm" id="btn-delete-doc">🗑️ Sənədi Sil</button>
+              <button class="btn btn-danger btn-sm" id="btn-delete-doc" data-i18n="btn_delete_doc">🗑️ Sil</button>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Tab 4: AI Simulator Sandbox -->
+    <!-- Tab 4: Test -->
     <section class="tab-content" id="tab-simulator">
       <div class="card glass-card simulator-card">
         <div class="card-header">
           <div>
-            <h3>🧪 AI Sınaq Qutusu (Test Sandbox)</h3>
-            <p class="card-desc">Alıcıların tap.az-da verə biləcəyi sualları burada yazaraq botun necə cavab verdiyini dərhal yoxlayın.</p>
+            <h3 data-i18n="sim_header">AI Test Simulyatoru</h3>
           </div>
-        </div>
-
-        <div class="simulator-quick-buttons">
-          <span class="quick-btn" data-msg="Salam, qiymət son nədir?">"Son qiymət nədir?"</span>
-          <span class="quick-btn" data-msg="Kupçası var? İpotekaya gedir?">"Kupça və İpoteka?"</span>
-          <span class="quick-btn" data-msg="Salam, mənzil harada yerləşir? Metroya yaxındır?">"Ünvan və Metro?"</span>
-          <span class="quick-btn" data-msg="Sabah saat 6-da evə baxmaq istəyirəm, gələ bilərəm?">"Evə baxmaq istəyirəm"</span>
-          <span class="quick-btn" data-msg="Здравствуйте! Квартира продается? Есть купчая?">"Русский язык (Купчая)"</span>
-          <span class="quick-btn" data-msg="Salam, maklerəm, müştərim var 1% faizlə işləyirsiniz?">"Makler müraciəti"</span>
         </div>
 
         <div class="sim-chat-window" id="sim-chat-window">
           <div class="sim-message bot">
             <div class="sim-avatar">🤖</div>
-            <div class="sim-bubble">Salam! Mən sizin ev satışı köməkçinizəm. Mənə alıcı sualları verin, sizə necə cavab verəcəyimi göstərim.</div>
+            <div class="sim-bubble">Salam! Mənə sual verin, sizə necə cavab verəcəyimi göstərim.</div>
           </div>
         </div>
 
         <div class="sim-input-row">
-          <input type="text" id="sim-input" placeholder="Məsələn: 'Kupçası var?', 'Kombi işləyir?', 'Sabah baxışa gəlmək olar?'" class="form-input">
-          <button class="btn btn-primary" id="btn-sim-send">Göndər 🚀</button>
+          <input type="text" id="sim-input" data-i18n-ph="sim_input_ph" placeholder="Bota sual verin..." class="form-input">
+          <button class="btn btn-primary" id="btn-sim-send" data-i18n="sim_send">Göndər 🚀</button>
         </div>
 
         <div class="sim-debug-panel hidden" id="sim-debug-panel">
-          <h5>🔍 AI Təhlil Nəticəsi:</h5>
           <pre id="sim-debug-json"></pre>
         </div>
       </div>
@@ -264,23 +242,22 @@ Məsələn:
     <div class="modal-card glass-card">
       <div class="modal-header">
         <div class="modal-icon">🤖</div>
-        <h3>Google Gemini API Açarınızla Giriş</h3>
-        <p class="modal-desc">
-          Bot sizin <strong>şəxsi Google Gemini kvotanız</strong> üzərindən işləyir. 
-          Açarınız sistemdə yoxdursa, Google tərəfindən təsdiqlənərək <strong>avtomatik yeni profiliniz</strong> yaradılacaq.
+        <h3 data-i18n="modal_title">Google Gemini API Açarınızla Giriş</h3>
+        <p class="modal-desc" data-i18n="modal_desc">
+          Bot sizin şəxsi Google Gemini kvotanız üzərindən işləyir.
         </p>
       </div>
       <form id="auth-form" class="modal-form">
         <div class="form-group">
-          <label for="input-api-key"><strong>Google Gemini API Key:</strong></label>
-          <input type="text" id="input-api-key" class="form-input" placeholder="Məs: AIzaSy... və ya master" required autocomplete="off">
+          <label for="input-api-key"><strong data-i18n="modal_key_label">Google Gemini API Key:</strong></label>
+          <input type="text" id="input-api-key" class="form-input" placeholder="AIzaSy..." required autocomplete="off">
           <span class="input-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">
-            Pulsuz Gemini API açarını <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--accent-blue); text-decoration: underline;">Google AI Studio</a>-dan 1 dəqiqəyə əldə edə bilərsiniz.
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--accent-blue); text-decoration: underline;">Google AI Studio</a>
           </span>
         </div>
         <div id="auth-error-msg" class="auth-error hidden" style="color: #f87171; font-size: 12px; margin-bottom: 8px;"></div>
         <div class="modal-actions">
-          <button type="submit" class="btn btn-primary btn-block" id="btn-auth-submit" style="width: 100%; padding: 12px; font-size: 14px;">Daxil Ol 🚀</button>
+          <button type="submit" class="btn btn-primary btn-block" id="btn-auth-submit" style="width: 100%; padding: 12px; font-size: 14px;" data-i18n="modal_submit">Daxil Ol 🚀</button>
         </div>
       </form>
     </div>

@@ -237,11 +237,6 @@ async function validateGeminiApiKey(apiKey) {
   }
   const cleanKey = apiKey.trim();
 
-  // Admin / Master Key override
-  if (cleanKey === 'master' || cleanKey === process.env.MASTER_API_KEY) {
-    return { valid: true, isMaster: true };
-  }
-
   try {
     const genAI = new GoogleGenerativeAI(cleanKey);
     const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
@@ -265,10 +260,8 @@ async function generateAIResponse(contactId, incomingMessage, customActiveDoc = 
   const agentSettings = getAgentSettings();
   const history = getChatHistory(contactId);
 
-  // Use user's own Gemini API key. Only use server .env if master admin or test suite without user key
-  const geminiKey = (userGeminiKey && userGeminiKey !== 'master')
-    ? userGeminiKey
-    : (process.env.GEMINI_API_KEY || '');
+  // Use user's own Gemini API key
+  const geminiKey = userGeminiKey || process.env.GEMINI_API_KEY || '';
 
   const systemPrompt = buildSystemPrompt(activeDoc);
 
