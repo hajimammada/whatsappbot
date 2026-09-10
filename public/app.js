@@ -363,10 +363,38 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function handleLogout() {
+    localStorage.removeItem('wa_api_key');
+    currentApiKey = null;
+    if (inputApiKey) inputApiKey.value = '';
+    if (activeApiKeyDisplay) {
+      activeApiKeyDisplay.textContent = '---';
+      activeApiKeyDisplay.title = '';
+    }
+    documents = [];
+    activeDocumentId = null;
+    selectedDocumentId = null;
+    if (docList) docList.innerHTML = '';
+    if (docTitleInput) docTitleInput.value = '';
+    if (docContentTextarea) docContentTextarea.value = '';
+    if (docsCountBadge) docsCountBadge.textContent = '0';
+    if (docCharCount) docCharCount.textContent = '0';
+    if (docWordCount) docWordCount.textContent = '0';
+    const leadsTableBody = document.getElementById('leads-table-body');
+    if (leadsTableBody) leadsTableBody.innerHTML = '';
+    const leadsEmptyState = document.getElementById('leads-empty');
+    if (leadsEmptyState) leadsEmptyState.classList.remove('hidden');
+    const leadsCount = document.getElementById('leads-count');
+    if (leadsCount) leadsCount.textContent = '0';
+    const statTotalLeads = document.getElementById('stat-total-leads');
+    if (statTotalLeads) statTotalLeads.textContent = '0';
+    const statAppointments = document.getElementById('stat-appointments');
+    if (statAppointments) statAppointments.textContent = '0';
+    showAuthModal();
+  }
+
   if (btnSwitchKey) {
-    btnSwitchKey.addEventListener('click', () => {
-      showAuthModal();
-    });
+    btnSwitchKey.addEventListener('click', handleLogout);
   }
 
   // -----------------------------------------------------------------
@@ -893,9 +921,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateVersionDisplay(version) {
     const el = document.getElementById('app-version');
     if (el && version) {
-      const clean = String(version).trim();
-      const formatted = clean.startsWith('v') ? `@${clean}` : `@v${clean}`;
-      el.textContent = `(${formatted})`;
+      const clean = String(version).trim().replace(/^[@()]+|[@()]+$/g, '');
+      const formatted = clean.startsWith('v') ? clean : `v${clean}`;
+      el.textContent = formatted;
     }
   }
 
