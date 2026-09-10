@@ -2,16 +2,68 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const pkg = require('../package.json');
+const { execSync } = require('child_process');
 
 const waClient = require('./whatsapp_client');
 const userManager = require('./user_manager');
 const { generateAIResponse, getAgentSettings } = require('./ai_engine');
 
+function getAppVersion() {
+  if (process.env.APP_VERSION) {
+    const v = process.env.APP_VERSION.trim();
+    return v.startsWith('v') ? v : `v${v}`;
+  }
+
+  try {
+    const gitTag = execSync('git describe --tags --always', {
+      cwd: path.join(__dirname, '..'),
+      timeout: 2000,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    }).trim();
+    if (gitTag) {
+      return gitTag.startsWith('v') ? gitTag : `v${gitTag}`;
+    }
+  } catch (err) {
+    // Git command not available
+  }
+
+  try {
+    const pkgPath = path.join(__dirname, '..', 'package.json');
+    const raw = fs.readFileSync(pkgPath, 'utf-8');
+    const pkg = JSON.parse(raw);
+    if (pkg.version) {
+      const v = pkg.version.trim();
+      return v.startsWith('v') ? v : `v${v}`;
+    }
+  } catch (err) {}
+
+  return 'v3.2.2';
+}
+
 function createServer() {
   const app = express();
   app.use(cors());
   app.use(express.json());
+
+  // Dynamic Root Handler: Injects live version & cache-busters directly into HTML
+  app.get('/', (req, res) => {
+    try {
+      const htmlPath = path.join(__dirname, '..', 'public', 'index.html');
+      let html = fs.readFileSync(htmlPath, 'utf-8');
+      const ver = getAppVersion();
+      html = html.replace(/id="app-version">.*?<\/span>/, `id="app-version">${ver}</span>`);
+      html = html.replace(/href="styles\.css(?:\?v=[^"]*)?"/, `href="styles.css?v=${ver}"`);
+      html = html.replace(/src="app\.js(?:\?v=[^"]*)?"/, `src="app.js?v=${ver}"`);
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.send(html);
+    } catch (e) {
+      res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+    }
+  });
+
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
   // SSE clients array
@@ -95,17 +147,19 @@ function createServer() {
 
   // Get status
   app.get('/api/status', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.json({
       ...waClient.getStatus(),
-      version: pkg.version
+      version: getAppVersion()
     });
   });
 
   // Get app version info dynamically
   app.get('/api/version', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.json({
       name: 'whatsappbot.hajimammad.com',
-      version: pkg.version
+      version: getAppVersion()
     });
   });
 

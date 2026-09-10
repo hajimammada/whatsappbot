@@ -929,7 +929,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function fetchVersion() {
     try {
-      const res = await fetch('/api/version');
+      const res = await fetch(`/api/version?_t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         if (data && data.version) {
@@ -943,7 +943,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function fetchStatus() {
     try {
-      const res = await fetch('/api/status');
+      const res = await fetch(`/api/status?_t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         if (data) {
