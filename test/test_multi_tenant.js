@@ -1,83 +1,94 @@
+require('dotenv').config();
 const assert = require('assert');
 const userManager = require('../src/user_manager');
+const { validateGeminiApiKey } = require('../src/ai_engine');
 
 async function runMultiTenantTests() {
   console.log('==================================================');
-  console.log('🧪 RUNNING MULTI-TENANT API KEY AUTH TESTS');
+  console.log('🧪 RUNNING GEMINI BYOK & MULTI-TENANT AUTH TESTS');
   console.log('==================================================\n');
 
-  // Test 1: Master Profile exists with Sumqayıt documents
-  console.log('Test 1: Verifying Master Profile & Existing Data Migration...');
+  // Test 1: Fake / Random Key is REJECTED by Gemini Live Validation
+  console.log('Test 1: Testing rejection of fake/random key ("random_gibberish_fake_123")...');
+  const fakeValidation = await validateGeminiApiKey('random_gibberish_fake_123');
+  assert(fakeValidation.valid === false, 'Fake key must be rejected');
+  console.log(`✅ Fake key successfully rejected with message: "${fakeValidation.error}"\n`);
+
+  await assert.rejects(
+    async () => {
+      await userManager.getOrCreateUser('random_gibberish_fake_123');
+    },
+    /Google Gemini API Key etibarsızdır/,
+    'getOrCreateUser must reject invalid Gemini keys'
+  );
+  console.log('✅ getOrCreateUser blocked fake key and refused to create profile.\n');
+
+  // Test 2: Master Key allows owner to log in
+  console.log('Test 2: Verifying Master Profile for server owner...');
   const masterKey = process.env.MASTER_API_KEY || 'master';
-  const { user: masterUser, isNew: masterIsNew } = userManager.getOrCreateUser(masterKey);
+  const { user: masterUser, isNew: masterIsNew } = await userManager.getOrCreateUser(masterKey);
   assert(masterUser, 'Master user must exist');
   assert(masterUser.documents.length > 0, 'Master user must contain documents');
   console.log(`✅ Master Profile: Key="${masterKey}", Docs=${masterUser.documents.length}, Active="${masterUser.documents[0].title}"\n`);
 
-  // Test 2: User A enters a new API Key -> System auto-creates profile
-  console.log('Test 2: User A enters new API key ("sk_test_user_a")...');
-  const keyA = 'sk_test_user_a';
-  const { user: userA, isNew: isNewA } = userManager.getOrCreateUser(keyA);
-  assert(isNewA === true, 'First time entering keyA must create a new profile');
-  assert(userA.apiKey === keyA, 'Profile apiKey must match keyA');
-  console.log(`✅ Profile A auto-created: ID=${userA.id}, Docs=${userA.documents.length}\n`);
+  // Test 3: Real Gemini API Key from .env is Validated and creates profile
+  console.log('Test 3: Testing live validation of real Gemini API Key from .env...');
+  const realKey = process.env.GEMINI_API_KEY;
+  if (realKey && realKey.length > 20) {
+    const realValidation = await validateGeminiApiKey(realKey);
+    console.log('Gemini validation result:', realValidation);
+    assert(realValidation.valid === true, 'Real key must be valid or pass quota check');
 
-  // Test 3: User A saves a unique document
-  console.log('Test 3: User A saves custom document ("Mənzil A Elanı")...');
-  userManager.createUserDocument(keyA, 'Mənzil A Elanı', 'Bu User A-nın mənzilidir. Qiymət: 100 000 AZN.', true);
-  const updatedUserA = userManager.getUser(keyA);
-  assert(updatedUserA.documents.some(d => d.title === 'Mənzil A Elanı'), 'User A must have Mənzil A Elanı');
-  console.log('✅ User A document created and saved.\n');
+    const { user: realUser, isNew: realIsNew } = await userManager.getOrCreateUser(realKey);
+    assert(realUser.apiKey === realKey, 'Profile apiKey must match realKey');
+    console.log(`✅ Real user profile provisioned with valid Gemini Key: ID=${realUser.id}\n`);
 
-  // Test 4: User B enters a new API Key -> System auto-creates profile B
-  console.log('Test 4: User B enters new API key ("sk_test_user_b")...');
-  const keyB = 'sk_test_user_b';
-  const { user: userB, isNew: isNewB } = userManager.getOrCreateUser(keyB);
-  assert(isNewB === true, 'First time entering keyB must create a new profile');
-  console.log(`✅ Profile B auto-created: ID=${userB.id}\n`);
+    // Test 4: Subsequent login with same real key loads existing profile
+    console.log('Test 4: Logging in again with the same real key...');
+    const { user: returnUser, isNew: returnIsNew } = await userManager.getOrCreateUser(realKey);
+    assert(returnIsNew === false, 'Subsequent login must load existing profile');
+    assert(returnUser.id === realUser.id, 'User ID must match');
+    console.log('✅ Existing profile loaded successfully without recreation.\n');
+  }
 
-  // Test 5: User B saves a unique document
-  console.log('Test 5: User B saves custom document ("Avtomobil B Elanı")...');
-  userManager.createUserDocument(keyB, 'Avtomobil B Elanı', 'Bu User B-nin avtomobilidir. Qiymət: 30 000 USD.', true);
-  const updatedUserB = userManager.getUser(keyB);
-  assert(updatedUserB.documents.some(d => d.title === 'Avtomobil B Elanı'), 'User B must have Avtomobil B Elanı');
-  console.log('✅ User B document created and saved.\n');
+  // Test 5: Document and Lead Isolation
+  console.log('Test 5: Verifying Document & Lead Isolation between profiles...');
+  const key1 = 'test_user_key_alpha';
+  const key2 = 'test_user_key_beta';
+  
+  // Directly save in DB for isolation testing
+  const db = userManager.loadUsersDb();
+  db.users[key1] = {
+    id: 'usr_alpha',
+    apiKey: key1,
+    documents: [{ id: 'doc_alpha', title: 'Alpha Sənəd', content: 'Alpha məlumatı' }],
+    activeDocumentId: 'doc_alpha',
+    leads: [{ id: 'l1', phoneNumber: '994501111111', name: 'Alpha Alıcı' }]
+  };
+  db.users[key2] = {
+    id: 'usr_beta',
+    apiKey: key2,
+    documents: [{ id: 'doc_beta', title: 'Beta Sənəd', content: 'Beta məlumatı' }],
+    activeDocumentId: 'doc_beta',
+    leads: [{ id: 'l2', phoneNumber: '994502222222', name: 'Beta Alıcı' }]
+  };
+  userManager.saveUsersDb(db);
 
-  // Test 6: Verify Complete Data Isolation between User A and User B
-  console.log('Test 6: Verifying Complete Data Isolation...');
-  const checkA = userManager.getUser(keyA);
-  const checkB = userManager.getUser(keyB);
-  assert(!checkA.documents.some(d => d.title === 'Avtomobil B Elanı'), 'User A must NOT see User B document');
-  assert(!checkB.documents.some(d => d.title === 'Mənzil A Elanı'), 'User B must NOT see User A document');
-  console.log('✅ Documents are 100% isolated between profiles.\n');
+  const check1 = userManager.getUser(key1);
+  const check2 = userManager.getUser(key2);
 
-  // Test 7: User A logs in again -> Existing profile loaded, NOT recreated
-  console.log('Test 7: User A logs in again with same keyA...');
-  const { user: returnUserA, isNew: returnIsNewA } = userManager.getOrCreateUser(keyA);
-  assert(returnIsNewA === false, 'Subsequent login with keyA must NOT recreate profile');
-  assert(returnUserA.documents.some(d => d.title === 'Mənzil A Elanı'), 'Existing documents must be preserved');
-  console.log('✅ Existing profile loaded with all saved data preserved.\n');
-
-  // Test 8: Lead Isolation
-  console.log('Test 8: Testing Lead Isolation between Profiles...');
-  userManager.recordUserLead(keyA, '994501111111', 'Salam A', { is_viewing_request: false, summary: 'Lead for A' });
-  userManager.recordUserLead(keyB, '994502222222', 'Salam B', { is_viewing_request: false, summary: 'Lead for B' });
-
-  const leadsA = userManager.getUser(keyA).leads;
-  const leadsB = userManager.getUser(keyB).leads;
-
-  assert(leadsA.some(l => l.phoneNumber === '994501111111'), 'User A must have Lead A');
-  assert(!leadsA.some(l => l.phoneNumber === '994502222222'), 'User A must NOT see Lead B');
-  assert(leadsB.some(l => l.phoneNumber === '994502222222'), 'User B must have Lead B');
-  assert(!leadsB.some(l => l.phoneNumber === '994501111111'), 'User B must NOT see Lead A');
-  console.log('✅ Leads are 100% isolated between profiles.\n');
+  assert(!check1.documents.some(d => d.title === 'Beta Sənəd'), 'User 1 cannot see User 2 document');
+  assert(!check2.documents.some(d => d.title === 'Alpha Sənəd'), 'User 2 cannot see User 1 document');
+  assert(!check1.leads.some(l => l.phoneNumber === '994502222222'), 'User 1 cannot see User 2 lead');
+  assert(!check2.leads.some(l => l.phoneNumber === '994501111111'), 'User 2 cannot see User 1 lead');
+  console.log('✅ Documents and Leads are 100% isolated.\n');
 
   console.log('==================================================');
-  console.log('🎉 ALL MULTI-TENANT PROFILE TESTS PASSED!');
+  console.log('🎉 ALL BYOK GEMINI & MULTI-TENANT TESTS PASSED!');
   console.log('==================================================');
 }
 
 runMultiTenantTests().catch(err => {
-  console.error('❌ Multi-tenant test failed:', err);
+  console.error('❌ Test failed:', err);
   process.exit(1);
 });

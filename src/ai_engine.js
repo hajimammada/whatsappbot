@@ -231,20 +231,48 @@ function fallbackRuleEngine(incomingMessage, activeDoc) {
   };
 }
 
-async function generateAIResponse(contactId, incomingMessage, customActiveDoc = null) {
+async function validateGeminiApiKey(apiKey) {
+  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length < 15) {
+    return { valid: false, error: 'Daxil edilən API Key formatı yanlışdır. Zəhmət olmasa real Google Gemini API açarı daxil edin.' };
+  }
+  const cleanKey = apiKey.trim();
+
+  // Admin / Master Key override
+  if (cleanKey === 'master' || cleanKey === process.env.MASTER_API_KEY) {
+    return { valid: true, isMaster: true };
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(cleanKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
+    await model.generateContent("Test connection ping");
+    return { valid: true };
+  } catch (err) {
+    const msg = err.message || '';
+    if (msg.includes('API_KEY_INVALID') || msg.includes('400') || msg.includes('API key not valid') || msg.includes('403')) {
+      return { valid: false, error: 'Daxil edilən Google Gemini API Key etibarsızdır. Google AI Studio-dan düzgün açar əldə edin (aistudio.google.com).' };
+    }
+    if (msg.includes('429') || msg.includes('quota') || msg.includes('ResourceExhausted')) {
+      // Key is valid, just quota was reached on free tier
+      return { valid: true, warning: 'Açar etibarlıdır, lakin Google kvotası tükənib.' };
+    }
+    return { valid: false, error: 'Google Gemini API ilə əlaqə qurula bilmədi: ' + msg };
+  }
+}
+
+async function generateAIResponse(contactId, incomingMessage, customActiveDoc = null, userGeminiKey = null) {
   const activeDoc = customActiveDoc || getActiveDocument();
   const agentSettings = getAgentSettings();
   const history = getChatHistory(contactId);
 
-  const provider = process.env.AI_PROVIDER || 'gemini';
-  const geminiKey = process.env.GEMINI_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
-  const groqKey = process.env.GROQ_API_KEY;
+  // Use user's own Gemini API key. Only use server .env if master admin or test suite without user key
+  const geminiKey = (userGeminiKey && userGeminiKey !== 'master')
+    ? userGeminiKey
+    : (process.env.GEMINI_API_KEY || '');
 
   const systemPrompt = buildSystemPrompt(activeDoc);
 
-  // Gemini API
-  if ((provider === 'gemini' || !openaiKey && !groqKey) && geminiKey && geminiKey !== 'your_gemini_api_key_here') {
+  if (geminiKey && geminiKey !== 'your_gemini_api_key_here') {
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
       const modelName = (agentSettings.models && agentSettings.models.gemini && agentSettings.models.gemini.model_name) || "gemini-3.6-flash";
@@ -267,11 +295,21 @@ async function generateAIResponse(contactId, incomingMessage, customActiveDoc = 
       appendToChatHistory(contactId, 'assistant', parsed.reply_text);
       return parsed;
     } catch (err) {
-      console.warn('Gemini API call failed, falling back to rule engine or secondary provider:', err.message);
+      console.warn('Gemini API call failed for user key:', err.message);
+      if (err.message.includes('429') || err.message.includes('quota') || err.message.includes('ResourceExhausted')) {
+        throw new Error('Google Gemini API kvotanız dolub (Rate Limit / 429 Quota Exceeded). Zəhmət olmasa aistudio.google.com-dan hesabınızı yoxlayın.');
+      }
+      if (err.message.includes('API_KEY_INVALID') || err.message.includes('400') || err.message.includes('403') || err.message.includes('API key not valid')) {
+        throw new Error('Google Gemini API açarınız etibarsızdır və ya bloklanıb.');
+      }
+      throw new Error('Gemini API ilə əlaqə xətası: ' + err.message);
     }
   }
 
-  // OpenAI or Groq
+  // OpenAI or Groq (if configured)
+  const provider = process.env.AI_PROVIDER || 'gemini';
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
   if ((provider === 'openai' || provider === 'groq') && (openaiKey || groqKey)) {
     try {
       const isGroq = provider === 'groq';
@@ -314,6 +352,7 @@ async function generateAIResponse(contactId, incomingMessage, customActiveDoc = 
 }
 
 module.exports = {
+  validateGeminiApiKey,
   generateAIResponse,
   getKnowledgeBase,
   saveKnowledgeBase,

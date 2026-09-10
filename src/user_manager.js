@@ -77,12 +77,16 @@ function saveUsersDb(db) {
   }
 }
 
-// Exactly what the user requested:
+const { validateGeminiApiKey } = require('./ai_engine');
+
 // If API key is in database -> returns existing profile
-// If API key is NOT in database -> system auto-creates a new profile and saves it
-function getOrCreateUser(apiKey) {
+// If API key is NOT in database:
+//   1. Validates key live against Google Gemini API
+//   2. If invalid -> throws error, NO profile created
+//   3. If valid -> system auto-creates a new profile and saves it
+async function getOrCreateUser(apiKey) {
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
-    throw new Error('API Key tələb olunur');
+    throw new Error('Google Gemini API Key tələb olunur');
   }
 
   const cleanKey = apiKey.trim();
@@ -95,7 +99,13 @@ function getOrCreateUser(apiKey) {
     return { user: db.users[cleanKey], isNew: false };
   }
 
-  // 2. If it is NOT in database -> system automatically creates new profile and saves in DB
+  // 2. If NOT in database -> Test against Google Gemini API!
+  const validation = await validateGeminiApiKey(cleanKey);
+  if (!validation.valid) {
+    throw new Error(validation.error || 'Daxil edilən Google Gemini API Key etibarsızdır. Zəhmət olmasa aistudio.google.com-dan düzgün açar daxil edin.');
+  }
+
+  // 3. Valid key -> system automatically creates new profile and saves in DB
   const newUserId = 'usr_' + Date.now();
   const now = new Date().toISOString();
 

@@ -33,14 +33,14 @@ function createServer() {
   });
 
   // Auth Middleware:
-  // Extracts API key. If key is in DB -> loads profile; if not -> auto-creates profile!
-  function requireAuth(req, res, next) {
+  // Extracts API key. If key is in DB -> loads profile; if not -> validates against Gemini & auto-creates profile!
+  async function requireAuth(req, res, next) {
     const apiKey = req.headers['x-api-key'] || req.query.api_key;
     if (!apiKey) {
-      return res.status(401).json({ error: 'Giriş üçün API Key tələb olunur' });
+      return res.status(401).json({ error: 'Giriş üçün Google Gemini API Key tələb olunur' });
     }
     try {
-      const { user, isNew } = userManager.getOrCreateUser(apiKey);
+      const { user, isNew } = await userManager.getOrCreateUser(apiKey);
       req.user = user;
       req.isNew = isNew;
       next();
@@ -50,13 +50,13 @@ function createServer() {
   }
 
   // Auth API
-  app.post('/api/auth/login', (req, res) => {
+  app.post('/api/auth/login', async (req, res) => {
     try {
       const { apiKey } = req.body;
       if (!apiKey || !apiKey.trim()) {
-        return res.status(400).json({ error: 'API Key daxil edilməlidir' });
+        return res.status(400).json({ error: 'Google Gemini API Key daxil edilməlidir' });
       }
-      const { user, isNew } = userManager.getOrCreateUser(apiKey);
+      const { user, isNew } = await userManager.getOrCreateUser(apiKey);
       res.json({
         success: true,
         isNew,
@@ -255,10 +255,10 @@ function createServer() {
       }
       const testContactId = 'test_simulation_' + req.user.id;
       const activeDoc = userManager.getUserActiveDocument(req.user);
-      const result = await generateAIResponse(testContactId, message, activeDoc);
+      const result = await generateAIResponse(testContactId, message, activeDoc, req.user.apiKey);
       res.json(result);
     } catch (err) {
-      res.status(500).json({ error: 'AI Error: ' + err.message });
+      res.status(500).json({ error: err.message });
     }
   });
 

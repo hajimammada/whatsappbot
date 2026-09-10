@@ -263,16 +263,19 @@ Məsələn:
   <div class="modal-overlay hidden" id="auth-modal">
     <div class="modal-card glass-card">
       <div class="modal-header">
-        <div class="modal-icon">🔑</div>
-        <h3>WhatsApp AI Agent</h3>
-        <p class="modal-desc">Daxil olmaq üçün <strong>API Açarınızı (API Key)</strong> daxil edin. Əgər açar sistemdə yoxdursa, avtomatik <strong>yeni profiliniz</strong> yaradılacaq.</p>
+        <div class="modal-icon">🤖</div>
+        <h3>Google Gemini API Açarınızla Giriş</h3>
+        <p class="modal-desc">
+          Bot sizin <strong>şəxsi Google Gemini kvotanız</strong> üzərindən işləyir. 
+          Açarınız sistemdə yoxdursa, Google tərəfindən təsdiqlənərək <strong>avtomatik yeni profiliniz</strong> yaradılacaq.
+        </p>
       </div>
       <form id="auth-form" class="modal-form">
         <div class="form-group">
-          <label for="input-api-key"><strong>API Key (Açarınız):</strong></label>
-          <input type="text" id="input-api-key" class="form-input" placeholder="Məs: my-secret-key və ya sk_..." required autocomplete="off">
+          <label for="input-api-key"><strong>Google Gemini API Key:</strong></label>
+          <input type="text" id="input-api-key" class="form-input" placeholder="Məs: AIzaSy... və ya master" required autocomplete="off">
           <span class="input-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">
-            İstənilən gizli açar sözü yaza bilərsiniz. Hər açara ayrıca profil bağlanır.
+            Pulsuz Gemini API açarını <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--accent-blue); text-decoration: underline;">Google AI Studio</a>-dan 1 dəqiqəyə əldə edə bilərsiniz.
           </span>
         </div>
         <div id="auth-error-msg" class="auth-error hidden" style="color: #f87171; font-size: 12px; margin-bottom: 8px;"></div>
