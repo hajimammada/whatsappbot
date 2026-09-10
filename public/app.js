@@ -41,8 +41,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const leadsBadgeCount = document.getElementById('leads-count');
   const btnRefreshLeads = document.getElementById('btn-refresh-leads');
 
-  const profileForm = document.getElementById('profile-form');
-  const btnSaveProfile = document.getElementById('btn-save-profile');
+  const btnNewDoc = document.getElementById('btn-new-doc');
+  const btnSaveDoc = document.getElementById('btn-save-doc');
+  const btnDeleteDoc = document.getElementById('btn-delete-doc');
+  const docList = document.getElementById('doc-list');
+  const docsCountBadge = document.getElementById('docs-count-badge');
+  const docTitleInput = document.getElementById('doc-title-input');
+  const docContentTextarea = document.getElementById('doc-content-textarea');
+  const docIsActiveCheckbox = document.getElementById('doc-is-active-checkbox');
+  const docCharCount = document.getElementById('doc-char-count');
+  const docWordCount = document.getElementById('doc-word-count');
 
   const simChatWindow = document.getElementById('sim-chat-window');
   const simInput = document.getElementById('sim-input');
@@ -51,7 +59,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const simDebugJson = document.getElementById('sim-debug-json');
   const quickButtons = document.querySelectorAll('.quick-btn');
 
-  let currentProfile = {};
+  let documents = [];
+  let activeDocumentId = null;
+  let selectedDocumentId = null;
   let totalMessagesCount = 0;
   let chatStatuses = {}; // phone -> { isPaused, remainingMinutes }
 
@@ -88,9 +98,13 @@ document.addEventListener('DOMContentLoaded', () => {
       appendMessageToFeed(data);
     } else if (type === 'leads_updated') {
       loadLeads();
-    } else if (type === 'profile_updated') {
-      currentProfile = data;
-      populateProfileForm(data);
+    } else if (type === 'documents_updated') {
+      if (data.documents) {
+        documents = data.documents;
+        activeDocumentId = data.activeDocumentId;
+        renderDocumentList();
+        if (selectedDocumentId) populateEditor(selectedDocumentId);
+      }
     } else if (type === 'settings_updated') {
       if (data.autoReplyEnabled !== undefined) {
         autoReplyToggle.checked = data.autoReplyEnabled;
@@ -192,113 +206,160 @@ document.addEventListener('DOMContentLoaded', () => {
     messagesFeed.scrollTop = messagesFeed.scrollHeight;
   }
 
-  // 3. House Profile
-  async function loadHouseProfile() {
+  // 3. Document Management (Universal Knowledge Base)
+  async function loadDocuments() {
     try {
-      const res = await fetch('/api/house-profile');
-      currentProfile = await res.json();
-      populateProfileForm(currentProfile);
-    } catch (err) {
-      console.error('Error loading house profile:', err);
-    }
-  }
-
-  function populateProfileForm(p) {
-    const info = p.property_info || {};
-    const specs = p.specifications || {};
-    const reno = p.renovation_and_utilities || {};
-    const docs = p.documents_and_mortgage || p.documents_and_legal || {};
-    const fin = p.financial_details || p.pricing_and_negotiation || {};
-    const schedule = p.viewing_schedule || {};
-
-    document.getElementById('prop-title').value = info.title || '';
-    document.getElementById('prop-district').value = info.city || info.district || '';
-    document.getElementById('prop-metro').value = info.complex_name || info.metro_proximity || '';
-    document.getElementById('prop-landmark').value = info.landmark || '';
-    document.getElementById('prop-address').value = info.location_details || info.address || '';
-
-    document.getElementById('prop-rooms').value = specs.rooms || '';
-    document.getElementById('prop-area').value = specs.area_sqm || '';
-    document.getElementById('prop-floor').value = specs.floor || '';
-    document.getElementById('prop-total-floors').value = specs.total_floors || '';
-    document.getElementById('prop-balcony').value = specs.balcony || '';
-
-    document.getElementById('prop-initial-payment').value = fin.initial_payment_azn || '';
-    document.getElementById('prop-monthly-payment').value = fin.monthly_payment_azn || '';
-    document.getElementById('prop-interest-rate').value = fin.interest_rate || '4%';
-    document.getElementById('prop-remaining-period').value = fin.remaining_period || '23 il';
-
-    document.getElementById('prop-doc').value = docs.document_type || '';
-    document.getElementById('prop-mortgage').value = docs.mortgage_transfer || docs.mortgage_type || '';
-    document.getElementById('prop-discount-policy').value = fin.discount_policy || '';
-
-    document.getElementById('prop-reno').value = reno.renovation_status || '';
-    document.getElementById('prop-furnished').value = reno.furnished_status || '';
-    document.getElementById('prop-heating').value = reno.heating_system || '';
-    document.getElementById('prop-viewing-hours').value = schedule.availability_hours || '';
-  }
-
-  btnSaveProfile.addEventListener('click', async (e) => {
-    e.preventDefault();
-    btnSaveProfile.textContent = 'Yadda saxlanılır...';
-
-    const updated = {
-      property_info: {
-        ...currentProfile.property_info,
-        title: document.getElementById('prop-title').value,
-        city: document.getElementById('prop-district').value,
-        complex_name: document.getElementById('prop-metro').value,
-        landmark: document.getElementById('prop-landmark').value,
-        location_details: document.getElementById('prop-address').value
-      },
-      specifications: {
-        ...currentProfile.specifications,
-        rooms: document.getElementById('prop-rooms').value,
-        area_sqm: Number(document.getElementById('prop-area').value),
-        floor: Number(document.getElementById('prop-floor').value),
-        balcony: document.getElementById('prop-balcony').value
-      },
-      documents_and_mortgage: {
-        ...currentProfile.documents_and_mortgage,
-        document_type: document.getElementById('prop-doc').value,
-        mortgage_type: 'Hazır 4%-li güzəştli dövlət ipotekası',
-        mortgage_transfer: document.getElementById('prop-mortgage').value
-      },
-      financial_details: {
-        ...currentProfile.financial_details,
-        initial_payment_azn: Number(document.getElementById('prop-initial-payment').value),
-        monthly_payment_azn: Number(document.getElementById('prop-monthly-payment').value),
-        interest_rate: document.getElementById('prop-interest-rate').value,
-        remaining_period: document.getElementById('prop-remaining-period').value,
-        discount_policy: document.getElementById('prop-discount-policy').value
-      },
-      renovation_and_utilities: {
-        ...currentProfile.renovation_and_utilities,
-        renovation_status: document.getElementById('prop-reno').value,
-        furnished_status: document.getElementById('prop-furnished').value,
-        heating_system: document.getElementById('prop-heating').value
-      },
-      viewing_schedule: {
-        ...currentProfile.viewing_schedule,
-        availability_hours: document.getElementById('prop-viewing-hours').value
-      },
-      rules_for_brokers: currentProfile.rules_for_brokers || {}
-    };
-
-    try {
-      const res = await fetch('/api/house-profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated)
-      });
+      const res = await fetch('/api/documents');
       const data = await res.json();
-      btnSaveProfile.textContent = '✅ Yadda Saxlanıldı!';
-      setTimeout(() => { btnSaveProfile.textContent = '💾 Yadda Saxla'; }, 2000);
+      documents = data.documents || [];
+      activeDocumentId = data.activeDocumentId;
+
+      if (!selectedDocumentId || !documents.some(d => d.id === selectedDocumentId)) {
+        selectedDocumentId = activeDocumentId || (documents[0] && documents[0].id) || null;
+      }
+
+      renderDocumentList();
+      if (selectedDocumentId) {
+        populateEditor(selectedDocumentId);
+      }
     } catch (err) {
-      alert('Xəta baş verdi: ' + err.message);
-      btnSaveProfile.textContent = '💾 Yadda Saxla';
+      console.error('Error loading documents:', err);
     }
-  });
+  }
+
+  function renderDocumentList() {
+    if (!docList) return;
+    if (docsCountBadge) docsCountBadge.textContent = `${documents.length} sənəd`;
+
+    if (documents.length === 0) {
+      docList.innerHTML = `<div style="padding: 12px; color: var(--text-muted); font-size: 12px;">Hələ heç bir sənəd yoxdur.</div>`;
+      return;
+    }
+
+    docList.innerHTML = documents.map(d => {
+      const isActive = d.id === activeDocumentId;
+      const isSelected = d.id === selectedDocumentId;
+      const updatedDate = d.updatedAt ? new Date(d.updatedAt).toLocaleDateString('az-AZ', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
+      return `
+        <div class="doc-item ${isActive ? 'active-kb' : ''} ${isSelected ? 'selected' : ''}" data-id="${d.id}">
+          <div class="doc-item-title">${escapeHtml(d.title || 'Başlıqsız Sənəd')}</div>
+          <div class="doc-item-meta">
+            <span>${updatedDate}</span>
+            ${isActive ? '<span class="badge-active-kb">⭐ AKTİV BAZA</span>' : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    docList.querySelectorAll('.doc-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const id = item.getAttribute('data-id');
+        selectedDocumentId = id;
+        renderDocumentList();
+        populateEditor(id);
+      });
+    });
+  }
+
+  function populateEditor(docId) {
+    const doc = documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    if (docTitleInput) docTitleInput.value = doc.title || '';
+    if (docContentTextarea) docContentTextarea.value = doc.content || '';
+    if (docIsActiveCheckbox) docIsActiveCheckbox.checked = (doc.id === activeDocumentId);
+    updateWordStats();
+  }
+
+  function updateWordStats() {
+    if (!docContentTextarea) return;
+    const text = docContentTextarea.value || '';
+    const charLen = text.length;
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    if (docCharCount) docCharCount.textContent = `${charLen.toLocaleString()} simvol`;
+    if (docWordCount) docWordCount.textContent = `${words.toLocaleString()} söz`;
+  }
+
+  if (docContentTextarea) {
+    docContentTextarea.addEventListener('input', updateWordStats);
+  }
+
+  if (btnSaveDoc) {
+    btnSaveDoc.addEventListener('click', async () => {
+      if (!selectedDocumentId) return;
+      btnSaveDoc.textContent = 'Yadda saxlanılır...';
+
+      const payload = {
+        title: docTitleInput.value.trim() || 'Başlıqsız Sənəd',
+        content: docContentTextarea.value,
+        makeActive: docIsActiveCheckbox.checked
+      };
+
+      try {
+        const res = await fetch(`/api/documents/${selectedDocumentId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        btnSaveDoc.textContent = '✅ Yadda Saxlanıldı!';
+        await loadDocuments();
+        setTimeout(() => { btnSaveDoc.textContent = '💾 Yadda Saxla'; }, 2000);
+      } catch (err) {
+        alert('Xəta baş verdi: ' + err.message);
+        btnSaveDoc.textContent = '💾 Yadda Saxla';
+      }
+    });
+  }
+
+  if (btnNewDoc) {
+    btnNewDoc.addEventListener('click', async () => {
+      btnNewDoc.textContent = 'Yaradılır...';
+      try {
+        const res = await fetch('/api/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: 'Yeni Sənəd ' + (documents.length + 1),
+            content: '',
+            makeActive: false
+          })
+        });
+        const data = await res.json();
+        await loadDocuments();
+        const lastDoc = documents[documents.length - 1];
+        if (lastDoc) {
+          selectedDocumentId = lastDoc.id;
+          renderDocumentList();
+          populateEditor(lastDoc.id);
+          if (docTitleInput) docTitleInput.focus();
+        }
+      } finally {
+        btnNewDoc.textContent = '➕ Yeni Sənəd Yarat';
+      }
+    });
+  }
+
+  if (btnDeleteDoc) {
+    btnDeleteDoc.addEventListener('click', async () => {
+      if (!selectedDocumentId) return;
+      if (documents.length <= 1) {
+        alert('Yeganə mövcud sənədi silə bilməzsiniz. Əvvəlcə yeni sənəd yaradın.');
+        return;
+      }
+      const doc = documents.find(d => d.id === selectedDocumentId);
+      if (!confirm(`"${doc?.title || 'Bu sənədi'}" silmək istədiyinizə əminsiniz?`)) return;
+
+      try {
+        await fetch(`/api/documents/${selectedDocumentId}`, { method: 'DELETE' });
+        selectedDocumentId = null;
+        await loadDocuments();
+      } catch (e) {
+        alert('Xəta: ' + e.message);
+      }
+    });
+  }
 
   // 4. Leads Management
   async function loadLeads() {
@@ -523,6 +584,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial Boot
   initSSE();
   fetchStatus();
-  loadHouseProfile();
+  loadDocuments();
   loadLeads();
 });

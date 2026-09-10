@@ -43,7 +43,7 @@
     <nav class="nav-tabs">
       <button class="tab-btn active" data-tab="tab-overview">📊 İdarəetmə Paneli & QR</button>
       <button class="tab-btn" data-tab="tab-leads">👥 Alıcılar & Görüşlər <span class="tab-badge" id="leads-count">0</span></button>
-      <button class="tab-btn" data-tab="tab-profile">⚙️ Mənzil Məlumatları (Baza)</button>
+      <button class="tab-btn" data-tab="tab-profile">📚 Bilik Bazası & Sənədlər</button>
       <button class="tab-btn" data-tab="tab-simulator">🧪 AI Sınaq Qutusu</button>
     </nav>
 
@@ -152,134 +152,65 @@
       </div>
     </section>
 
-    <!-- Tab 3: House Profile Editor -->
+    <!-- Tab 3: Universal Knowledge Base & Document Manager -->
     <section class="tab-content" id="tab-profile">
       <div class="card glass-card">
         <div class="card-header">
           <div>
-            <h3>⚙️ Mənzil Haqqında Məlumatlar Bazası</h3>
-            <p class="card-desc">Bot bu məlumatlara əsaslanaraq alıcılara cavab verir. İstənilən parametri dəyişib yadda saxlaya bilərsiniz.</p>
+            <h3>📚 Bilik Bazası və Sənədlər (Universal Knowledge Base)</h3>
+            <p class="card-desc">Botun istifadə edəcəyi məlumatları bura daxil edin. İstədiyiniz mövzuda (ev, maşın, xidmət, FAQ) sənəd yarada və asanlıqla dəyişə bilərsiniz.</p>
           </div>
-          <button class="btn btn-primary" id="btn-save-profile">💾 Yadda Saxla</button>
+          <div class="doc-header-actions">
+            <button class="btn btn-secondary" id="btn-new-doc">➕ Yeni Sənəd Yarat</button>
+            <button class="btn btn-primary" id="btn-save-doc">💾 Yadda Saxla</button>
+          </div>
         </div>
 
-        <form id="profile-form" class="profile-form-grid">
-          <!-- Section 1: Əsas Məlumat və Ünvan -->
-          <div class="form-section">
-            <h4>📍 Ünvan və Məkan</h4>
-            <div class="form-group">
-              <label>Elan Başlığı:</label>
-              <input type="text" id="prop-title" name="title" class="form-input">
+        <div class="doc-manager-grid">
+          <!-- Left Column: Document List -->
+          <div class="doc-sidebar">
+            <div class="doc-sidebar-header">
+              <h4>📑 Sənədləriniz</h4>
+              <span class="badge" id="docs-count-badge">1 sənəd</span>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Şəhər / Rayon:</label>
-                <input type="text" id="prop-district" name="district" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>Ən yaxın Metro:</label>
-                <input type="text" id="prop-metro" name="metro_proximity" class="form-input">
-              </div>
-            </div>
-            <div class="form-group">
-              <label>Oriyentir / Tanınan Yer:</label>
-              <input type="text" id="prop-landmark" name="landmark" class="form-input">
-            </div>
-            <div class="form-group">
-              <label>Dəqiq Ünvan:</label>
-              <input type="text" id="prop-address" name="address" class="form-input">
+            <div class="doc-list" id="doc-list">
+              <!-- Dynamically populated document items -->
             </div>
           </div>
 
-          <!-- Section 2: Texniki Göstəricilər -->
-          <div class="form-section">
-            <h4>📐 Mənzil Parametrləri</h4>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Otaq Sayı:</label>
-                <input type="text" id="prop-rooms" name="rooms" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>Ümumi Sahə (m²):</label>
-                <input type="number" id="prop-area" name="area_sqm" class="form-input">
-              </div>
+          <!-- Right Column: Document Editor -->
+          <div class="doc-editor">
+            <div class="doc-form-group">
+              <label for="doc-title-input"><strong>Sənədin Başlığı:</strong></label>
+              <input type="text" id="doc-title-input" class="form-input" placeholder="Məs: Sumqayıt Ev Satışı, Avtomobil Satışı, Şirkət FAQ...">
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Mərtəbə:</label>
-                <input type="number" id="prop-floor" name="floor" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>Binanın Mərtəbə Sayı:</label>
-                <input type="number" id="prop-total-floors" name="total_floors" class="form-input">
-              </div>
-            </div>
-            <div class="form-group">
-              <label>Eyvan / Balkon:</label>
-              <input type="text" id="prop-balcony" name="balcony" class="form-input">
-            </div>
-          </div>
 
-          <!-- Section 3: Sənədlər və İpoteka Şərtləri -->
-          <div class="form-section">
-            <h4>📄 Sənədlər və İpoteka Şərtləri</h4>
-            <div class="form-row">
-              <div class="form-group">
-                <label>İlkin Ödəniş (AZN):</label>
-                <input type="number" id="prop-initial-payment" name="initial_payment_azn" class="form-input">
+            <div class="doc-form-group">
+              <div class="editor-label-row">
+                <label for="doc-content-textarea"><strong>Məlumat Mətni (Bilik Bazası):</strong></label>
+                <div class="editor-stats">
+                  <span id="doc-char-count">0 simvol</span> • <span id="doc-word-count">0 söz</span>
+                </div>
               </div>
-              <div class="form-group">
-                <label>Aylıq Ödəniş (AZN):</label>
-                <input type="number" id="prop-monthly-payment" name="monthly_payment_azn" class="form-input">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>İpoteka Faizi:</label>
-                <input type="text" id="prop-interest-rate" name="interest_rate" class="form-input" placeholder="4%">
-              </div>
-              <div class="form-group">
-                <label>Qalıq Müddət:</label>
-                <input type="text" id="prop-remaining-period" name="remaining_period" class="form-input" placeholder="23 il">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Sənəd Növü:</label>
-                <input type="text" id="prop-doc" name="document_type" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>İpoteka / Ötürmə:</label>
-                <input type="text" id="prop-mortgage" name="mortgage_transfer" class="form-input">
-              </div>
-            </div>
-            <div class="form-group">
-              <label>Endirim / Razılaşma Siyasəti:</label>
-              <textarea id="prop-discount-policy" name="discount_policy" class="form-input" rows="2"></textarea>
-            </div>
-          </div>
+              <textarea id="doc-content-textarea" class="form-input doc-textarea" rows="16" placeholder="Bura AI botun bilməsini və müştərilərə cavab verməsini istədiyiniz bütün məlumatları sərbəst şəkildə yazın və ya yapışdırın...
 
-          <!-- Section 4: Təmir, Kommunal və Baxış -->
-          <div class="form-section">
-            <h4>🛋️ Təmir, Təchizat və Baxış Vaxtı</h4>
-            <div class="form-group">
-              <label>Təmir Vəziyyəti:</label>
-              <input type="text" id="prop-reno" name="renovation_status" class="form-input">
+Məsələn:
+- Satılan əşya/mənzil/avtomobil haqqında məlumatlar
+- Qiymət və ödəniş şərtləri
+- Ünvan, əlaqə və görüş/baxış vaxtları
+- Tez-tez verilən suallar və onların dəqiq cavabları"></textarea>
             </div>
-            <div class="form-group">
-              <label>Əşyalar / Mebel:</label>
-              <input type="text" id="prop-furnished" name="furnished_status" class="form-input">
-            </div>
-            <div class="form-group">
-              <label>İstilik Sistemi (Kombi və s.):</label>
-              <input type="text" id="prop-heating" name="heating_system" class="form-input">
-            </div>
-            <div class="form-group">
-              <label>Baxış Saatları (Uyğun gün/saatlar):</label>
-              <input type="text" id="prop-viewing-hours" name="availability_hours" class="form-input">
+
+            <div class="doc-bottom-bar">
+              <label class="doc-active-toggle-label">
+                <input type="checkbox" id="doc-is-active-checkbox">
+                <span>⭐ Bu sənədi WhatsApp üçün <strong>Aktiv Bilik Bazası</strong> təyin et</span>
+              </label>
+
+              <button class="btn btn-danger btn-sm" id="btn-delete-doc">🗑️ Sənədi Sil</button>
             </div>
           </div>
-        </form>
+        </div>
       </div>
     </section>
 

@@ -5,7 +5,16 @@ const fs = require('fs');
 
 const waClient = require('./whatsapp_client');
 const { getLeads, updateLeadStatus } = require('./lead_manager');
-const { generateAIResponse, getHouseProfile, getAgentSettings } = require('./ai_engine');
+const {
+  generateAIResponse,
+  getDocuments,
+  saveDocument,
+  createDocument,
+  setActiveDocument,
+  deleteDocument,
+  getActiveDocument,
+  getAgentSettings
+} = require('./ai_engine');
 
 const HOUSE_PROFILE_PATH = path.join(__dirname, '..', 'config', 'house_profile.json');
 
@@ -98,20 +107,64 @@ function createServer() {
     }
   });
 
-  // House Profile API
-  app.get('/api/house-profile', (req, res) => {
-    res.json(getHouseProfile());
+// Document Management API (Universal Knowledge Base)
+  app.get('/api/documents', (req, res) => {
+    try {
+      res.json(getDocuments());
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.post('/api/house-profile', (req, res) => {
+  app.post('/api/documents', (req, res) => {
     try {
-      const updatedProfile = req.body;
-      fs.writeFileSync(HOUSE_PROFILE_PATH, JSON.stringify(updatedProfile, null, 2), 'utf-8');
-      broadcastSSE('profile_updated', updatedProfile);
-      res.json({ success: true, message: 'House profile updated successfully!' });
+      const { title, content, makeActive } = req.body;
+      const kb = createDocument(title, content, makeActive);
+      broadcastSSE('documents_updated', getDocuments());
+      res.json({ success: true, message: 'Sənəd uğurla yaradıldı!', knowledgeBase: kb });
     } catch (err) {
-      res.status(500).json({ error: 'Failed to update profile: ' + err.message });
+      res.status(500).json({ error: err.message });
     }
+  });
+
+  app.put('/api/documents/:id', (req, res) => {
+    try {
+      const { title, content, makeActive } = req.body;
+      const kb = saveDocument({ id: req.params.id, title, content, makeActive });
+      broadcastSSE('documents_updated', getDocuments());
+      res.json({ success: true, message: 'Sənəd uğurla yadda saxlanıldı!', knowledgeBase: kb });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/documents/:id/activate', (req, res) => {
+    try {
+      const ok = setActiveDocument(req.params.id);
+      if (ok) {
+        broadcastSSE('documents_updated', getDocuments());
+        res.json({ success: true, message: 'Sənəd aktiv baza kimi təyin edildi!' });
+      } else {
+        res.status(404).json({ error: 'Sənəd tapılmadı' });
+      }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/documents/:id', (req, res) => {
+    try {
+      const kb = deleteDocument(req.params.id);
+      broadcastSSE('documents_updated', getDocuments());
+      res.json({ success: true, message: 'Sənəd silindi', knowledgeBase: kb });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Backward compatibility endpoint
+  app.get('/api/house-profile', (req, res) => {
+    res.json(getActiveDocument());
   });
 
   // Leads API
