@@ -38,7 +38,7 @@ function getAppVersion() {
     }
   } catch (err) {}
 
-  return 'v3.2.2';
+  return 'v3.2.4';
 }
 
 function createServer() {
@@ -47,7 +47,7 @@ function createServer() {
   app.use(express.json());
 
   // Dynamic Root Handler: Injects live version & cache-busters directly into HTML
-  app.get('/', (req, res) => {
+  app.get(['/', '/index.html'], (req, res) => {
     try {
       const htmlPath = path.join(__dirname, '..', 'public', 'index.html');
       let html = fs.readFileSync(htmlPath, 'utf-8');
