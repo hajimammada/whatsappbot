@@ -65,8 +65,8 @@ async function runTests() {
   setActiveDocument(createdDoc.id);
   assert(getActiveDocument().id === createdDoc.id, 'Active document should be updated to created document');
 
-  // Switch back to original Sumqayit doc
-  const originalDoc = updatedKb.documents.find(d => d.id === 'doc_sumqayit_ev');
+  // Switch back to original default doc
+  const originalDoc = updatedKb.documents.find(d => d.id !== createdDoc.id);
   if (originalDoc) {
     setActiveDocument(originalDoc.id);
   }

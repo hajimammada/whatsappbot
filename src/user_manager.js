@@ -29,8 +29,16 @@ function getInitialDocuments() {
 
   const defaultDoc = {
     id: 'doc_' + Date.now(),
-    title: 'Məlumat Sənədi / Knowledge Base',
-    content: `Bura AI botun cavablandırmasını istədiyiniz bütün məlumatları sərbəst şəkildə yazın.`,
+    title: 'Bilik Bazası (Nümunə Sənəd)',
+    content: `Bura AI botun müştərilərə cavab verməsi üçün bilməsini istədiyiniz bütün məlumatları sərbəst şəkildə yaza bilərsiniz.
+
+Məsələn:
+- Təqdim olunan xidmət, satılan məhsul və ya təklifləriniz
+- Qiymətlər, ödəniş şərtləri və endirim qaydaları
+- Ünvan, iş saatları, əlaqə vasitələri və qəbul qaydaları
+- Müştərilərin ən çox verdiyi suallar və onların dəqiq cavabları
+
+İstədiyiniz vaxt bu mətni silib öz məlumatlarınızı yaza və ya "➕ Yeni Sənəd" düyməsi ilə əlavə sənədlər yarada bilərsiniz.`,
     updatedAt: new Date().toISOString()
   };
   return { documents: [defaultDoc], activeDocumentId: defaultDoc.id };
