@@ -52,9 +52,9 @@ document.addEventListener('DOMContentLoaded', () => {
       sim_header: "AI Test Simulyatoru",
       sim_input_ph: "Bota sual verin...",
       sim_send: "Göndər 🚀",
-      modal_title: "Google Gemini API Key və ya Parol ilə Giriş",
-      modal_desc: "Daxil olmaq üçün Google Gemini API açarınızı və ya bərpa parolunuzu daxil edin.",
-      modal_key_label: "API Key və ya Parol:",
+      modal_title: "Admin Parolu ilə Giriş",
+      modal_desc: "Şəxsi kabinetə daxil olmaq üçün təhlükəsiz parolunuzu daxil edin.",
+      modal_key_label: "Parol:",
       modal_submit: "Daxil Ol 🚀",
       lbl_cabinet_api_key: "Google Gemini API Açarınız:",
       btn_update_api_key: "💾 Yenilə",
@@ -110,9 +110,9 @@ document.addEventListener('DOMContentLoaded', () => {
       sim_header: "AI Тестовый симулятор",
       sim_input_ph: "Задайте вопрос боту...",
       sim_send: "Отправить 🚀",
-      modal_title: "Вход по Google Gemini API Key или паролю",
-      modal_desc: "Введите ваш Google Gemini API ключ или пароль восстановления для входа.",
-      modal_key_label: "API Key или Пароль:",
+      modal_title: "Вход по паролю администратора",
+      modal_desc: "Введите безопасный пароль для входа в панель управления.",
+      modal_key_label: "Пароль:",
       modal_submit: "Войти 🚀",
       lbl_cabinet_api_key: "Ваш Google Gemini API Ключ:",
       btn_update_api_key: "💾 Обновить",
@@ -168,10 +168,10 @@ document.addEventListener('DOMContentLoaded', () => {
       sim_header: "AI Test Simulator",
       sim_input_ph: "Ask the bot a question...",
       sim_send: "Send 🚀",
-      modal_title: "Sign In with Google Gemini API Key or Password",
-      modal_desc: "Enter your Google Gemini API key or recovery password to log in.",
-      modal_key_label: "API Key or Password:",
-      modal_submit: "Enter 🚀",
+      modal_title: "Sign In with Admin Password",
+      modal_desc: "Enter your secure password to access your dashboard.",
+      modal_key_label: "Password:",
+      modal_submit: "Sign In 🚀",
       lbl_cabinet_api_key: "Your Google Gemini API Key:",
       btn_update_api_key: "💾 Update",
       msg_key_updated: "✅ API Key successfully updated and saved!",
@@ -217,7 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => {
       const lang = btn.getAttribute('data-lang');
       setLanguage(lang);
-      if (currentApiKey) {
+      if (currentAuthToken) {
         loadLeads();
       }
     });
@@ -295,7 +295,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnToggleCabinetKeyVis = document.getElementById('btn-toggle-cabinet-key-vis');
   const cabinetKeyStatusMsg = document.getElementById('cabinet-key-status-msg');
 
-  let currentApiKey = localStorage.getItem('wa_api_key') || null;
+  let currentAuthToken = localStorage.getItem('wa_admin_pass') || localStorage.getItem('wa_api_key') || null;
+  let activeGeminiApiKey = null;
   let documents = [];
   let activeDocumentId = null;
   let selectedDocumentId = null;
@@ -316,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     if (inputApiKey) {
-      inputApiKey.value = currentApiKey || '';
+      inputApiKey.value = '';
       setTimeout(() => inputApiKey.focus(), 100);
     }
   }
@@ -327,30 +328,36 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateSessionDisplay(key) {
-    if (activeApiKeyDisplay && key) {
-      const masked = key.length > 8 ? key.substring(0, 4) + '...' + key.substring(key.length - 3) : key;
-      activeApiKeyDisplay.textContent = masked;
-      activeApiKeyDisplay.title = 'API Key: ' + key;
+    if (activeApiKeyDisplay) {
+      if (key && key !== 'Protected') {
+        const masked = key.length > 8 ? key.substring(0, 4) + '...' + key.substring(key.length - 3) : key;
+        activeApiKeyDisplay.textContent = masked;
+        activeApiKeyDisplay.title = 'Google Gemini Key: ' + key;
+      } else {
+        activeApiKeyDisplay.textContent = '🔒 Admin';
+        activeApiKeyDisplay.title = 'Admin Session Active';
+      }
     }
-    if (cabinetApiKeyInput && key) {
+    if (cabinetApiKeyInput && key && key !== 'Protected') {
       cabinetApiKeyInput.value = key;
     }
   }
 
   async function authFetch(url, options = {}) {
-    if (!currentApiKey) {
+    if (!currentAuthToken) {
       showAuthModal();
-      throw new Error('Google Gemini API Key required');
+      throw new Error('Admin parolu tələb olunur / Admin password required');
     }
     options.headers = options.headers || {};
     if (options.body && typeof options.body === 'string' && !options.headers['Content-Type']) {
       options.headers['Content-Type'] = 'application/json';
     }
-    options.headers['X-API-Key'] = currentApiKey;
+    options.headers['X-API-Key'] = currentAuthToken;
+    options.headers['X-Admin-Password'] = currentAuthToken;
 
     const res = await fetch(url, options);
     if (res.status === 401) {
-      showAuthModal('Google Gemini API Key etibarsızdır və ya tapılmadı.');
+      showAuthModal('Sessiyanın vaxtı bitdi və ya parol yanlışdır. Zəhmət olmasa yenidən daxil olun.');
       throw new Error('Unauthorized');
     }
     return res;
@@ -368,29 +375,35 @@ document.addEventListener('DOMContentLoaded', () => {
   if (authForm) {
     authForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const key = inputApiKey.value.trim();
-      if (!key) return;
+      const pass = inputApiKey.value.trim();
+      if (!pass) return;
 
       const btn = document.getElementById('btn-auth-submit');
       btn.disabled = true;
-      btn.textContent = 'Yoxlanılır...';
+      btn.textContent = '...';
 
       try {
         const res = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apiKey: key })
+          body: JSON.stringify({ password: pass })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Giriş uğursuz oldu');
 
-        // Store the active authenticated key (resolves to primary key even if recovery pass entered)
-        currentApiKey = (data.user && data.user.apiKey) ? data.user.apiKey : key;
-        localStorage.setItem('wa_api_key', currentApiKey);
-        updateSessionDisplay(currentApiKey);
+        currentAuthToken = pass;
+        localStorage.setItem('wa_admin_pass', currentAuthToken);
+        localStorage.setItem('wa_api_key', currentAuthToken);
+
+        activeGeminiApiKey = data.user?.apiKey || '';
+        updateSessionDisplay(activeGeminiApiKey || 'Protected');
+        if (cabinetApiKeyInput && activeGeminiApiKey) {
+          cabinetApiKeyInput.value = activeGeminiApiKey;
+        }
+
         hideAuthModal();
 
-        // Boot live services for this authenticated user
+        // Boot live services for this authenticated admin
         initSSE();
         await fetchStatus();
         await loadDocuments();
@@ -408,8 +421,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleLogout() {
+    localStorage.removeItem('wa_admin_pass');
     localStorage.removeItem('wa_api_key');
-    currentApiKey = null;
+    currentAuthToken = null;
+    activeGeminiApiKey = null;
     if (sseInstance) {
       sseInstance.close();
       sseInstance = null;
@@ -493,7 +508,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (newKey === currentApiKey) {
+    if (newKey === activeGeminiApiKey) {
       showCabinetKeyStatus(dict.msg_key_updated || 'API açarı artıq cari açardır.', 'success');
       return;
     }
@@ -514,10 +529,9 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error(data.error || 'Açar yenilənmədi');
       }
 
-      // Update current API key state and localStorage
-      currentApiKey = (data.user && data.user.apiKey) ? data.user.apiKey : newKey;
-      localStorage.setItem('wa_api_key', currentApiKey);
-      updateSessionDisplay(currentApiKey);
+      activeGeminiApiKey = (data.user && data.user.apiKey) ? data.user.apiKey : newKey;
+      updateSessionDisplay(activeGeminiApiKey);
+      if (cabinetApiKeyInput) cabinetApiKeyInput.value = activeGeminiApiKey;
 
       showCabinetKeyStatus(data.message || dict.msg_key_updated || 'API açarınız uğurla yeniləndi!', 'success');
 
@@ -554,13 +568,13 @@ document.addEventListener('DOMContentLoaded', () => {
   let sseInstance = null;
 
   function initSSE() {
-    if (!currentApiKey) return;
+    if (!currentAuthToken) return;
     if (sseInstance) {
       sseInstance.close();
       sseInstance = null;
     }
 
-    sseInstance = new EventSource('/api/events?api_key=' + encodeURIComponent(currentApiKey));
+    sseInstance = new EventSource('/api/events?api_key=' + encodeURIComponent(currentAuthToken));
 
     sseInstance.onmessage = (e) => {
       try {
@@ -577,7 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sseInstance.close();
         sseInstance = null;
       }
-      if (currentApiKey) {
+      if (currentAuthToken) {
         setTimeout(initSSE, 4000);
       }
     };
@@ -589,13 +603,13 @@ document.addEventListener('DOMContentLoaded', () => {
       updateConnectionStatus(data);
     } else if (type === 'chat_status_updated') {
       chatStatuses[data.phone] = data;
-      if (currentApiKey) loadLeads();
+      if (currentAuthToken) loadLeads();
     } else if (type === 'qr_generated') {
       renderQR(data.qrCodeDataUrl);
     } else if (type === 'new_message') {
       appendMessageToFeed(data);
     } else if (type === 'leads_updated') {
-      if (currentApiKey) loadLeads();
+      if (currentAuthToken) loadLeads();
     } else if (type === 'documents_updated') {
       if (data.documents) {
         documents = data.documents;
@@ -687,7 +701,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 5. Document Management (Data Tab)
   // -----------------------------------------------------------------
   async function loadDocuments() {
-    if (!currentApiKey) return;
+    if (!currentAuthToken) return;
     try {
       const res = await authFetch('/api/documents');
       const data = await res.json();
@@ -845,7 +859,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 6. Messages Management (Messages Tab)
   // -----------------------------------------------------------------
   async function loadLeads() {
-    if (!currentApiKey) return;
+    if (!currentAuthToken) return;
     try {
       const [leadsRes, statusRes] = await Promise.all([
         authFetch('/api/leads'),
@@ -1106,7 +1120,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function fetchStatus() {
-    if (!currentApiKey) return;
+    if (!currentAuthToken) return;
     try {
       const res = await authFetch(`/api/status?_t=${Date.now()}`);
       if (res.ok) {
@@ -1115,6 +1129,11 @@ document.addEventListener('DOMContentLoaded', () => {
           updateConnectionStatus(data);
           if (data.version) {
             updateVersionDisplay(data.version);
+          }
+          if (data.geminiApiKey !== undefined) {
+            activeGeminiApiKey = data.geminiApiKey;
+            if (cabinetApiKeyInput) cabinetApiKeyInput.value = data.geminiApiKey;
+            if (data.geminiApiKey) updateSessionDisplay(data.geminiApiKey);
           }
         }
       }
@@ -1129,8 +1148,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setLanguage(currentLang);
   fetchVersion();
 
-  if (currentApiKey) {
-    updateSessionDisplay(currentApiKey);
+  if (currentAuthToken) {
     hideAuthModal();
     initSSE();
     fetchStatus();

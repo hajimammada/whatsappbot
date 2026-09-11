@@ -85,7 +85,7 @@
               <button type="button" id="btn-toggle-cabinet-key-vis" style="background: none; border: none; color: var(--accent-blue); cursor: pointer; font-size: 11px;">👁️ Göstər</button>
             </div>
             <div style="display: flex; gap: 8px;">
-              <input type="password" id="cabinet-api-key-input" class="form-input" style="font-size: 12px; font-family: var(--font-mono); padding: 8px 10px;" placeholder="AIzaSy... və ya AQ.Ab8..." autocomplete="off">
+              <input type="password" id="cabinet-api-key-input" class="form-input" style="font-size: 12px; font-family: var(--font-mono); padding: 8px 10px;" placeholder="AIzaSy..." autocomplete="off">
               <button type="button" class="btn btn-primary btn-sm" id="btn-update-cabinet-api-key" style="white-space: nowrap; padding: 8px 14px; font-size: 12px;" data-i18n="btn_update_api_key">💾 Yenilə</button>
             </div>
             <div id="cabinet-key-status-msg" class="hidden" style="margin-top: 8px; font-size: 12px; line-height: 1.4;"></div>
@@ -258,22 +258,21 @@
     </section>
   </div>
 
-  <!-- API Key & Password Access Modal -->
+  <!-- Admin Password Access Modal -->
   <div class="modal-overlay hidden" id="auth-modal">
     <div class="modal-card glass-card">
       <div class="modal-header">
-        <div class="modal-icon">🤖</div>
-        <h3 data-i18n="modal_title">Google Gemini API Key və ya Parol ilə Giriş</h3>
+        <div class="modal-icon">🔐</div>
+        <h3 data-i18n="modal_title">Admin Parolu ilə Giriş</h3>
         <p class="modal-desc" data-i18n="modal_desc">
-          Daxil olmaq üçün Google Gemini API açarınızı və ya bərpa parolunuzu daxil edin.
+          Şəxsi kabinetə daxil olmaq üçün təhlükəsiz parolunuzu daxil edin.
         </p>
       </div>
       <form id="auth-form" class="modal-form">
         <div class="form-group">
-          <label for="input-api-key"><strong data-i18n="modal_key_label">API Key və ya Parol:</strong></label>
-          <input type="password" id="input-api-key" class="form-input" placeholder="AQ.Ab8... və ya Parol" required autocomplete="off">
-          <span class="input-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
-            <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--accent-blue); text-decoration: underline;">Google AI Studio</a>
+          <label for="input-api-key"><strong data-i18n="modal_key_label">Parol:</strong></label>
+          <input type="password" id="input-api-key" class="form-input" placeholder="••••••••••••" required autocomplete="current-password">
+          <span class="input-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: flex; justify-content: flex-end; align-items: center;">
             <button type="button" id="btn-toggle-key-visibility" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 12px;">👁️ Göstər</button>
           </span>
         </div>

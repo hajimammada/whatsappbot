@@ -38,12 +38,28 @@ function getAppVersion() {
     // Git command not available
   }
 
-  return 'v3.3.0';
+  return 'v3.4.0';
 }
 
 function createServer() {
   const app = express();
-  app.use(cors());
+  
+  // Strict CORS policy
+  const allowedOrigins = [
+    'https://whatsappbot.hajimammad.com',
+    'http://localhost:3000',
+    'http://localhost:3099'
+  ];
+  app.use(cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS not allowed'));
+      }
+    }
+  }));
+
   app.use(express.json());
 
   // Dynamic Root Handler: Injects live version & cache-busters directly into HTML
@@ -66,6 +82,31 @@ function createServer() {
 
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
+  // In-memory brute-force rate limiter for login
+  const loginAttempts = new Map();
+  function loginRateLimiter(req, res, next) {
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const windowMs = 15 * 60 * 1000;
+    const maxAttempts = 10;
+
+    let record = loginAttempts.get(ip);
+    if (!record || now > record.resetAt) {
+      record = { count: 1, resetAt: now + windowMs };
+      loginAttempts.set(ip, record);
+    } else {
+      record.count++;
+    }
+
+    if (record.count > maxAttempts) {
+      const waitMinutes = Math.ceil((record.resetAt - now) / 60000);
+      return res.status(429).json({
+        error: `Həddindən artıq uğursuz cəhd edildi. Zəhmət olmasa ${waitMinutes} dəqiqə sonra yenidən cəhd edin. / Too many login attempts. Please try again later.`
+      });
+    }
+    next();
+  }
+
   // SSE clients array
   const sseClients = [];
 
@@ -85,37 +126,33 @@ function createServer() {
     broadcastSSE(eventType, data);
   });
 
-  // Auth Middleware:
-  // Extracts API key. If key is in DB -> loads profile; if not -> validates against Gemini & auto-creates profile!
+  // Auth Middleware: Strictly verifies admin password
   async function requireAuth(req, res, next) {
-    const apiKey = req.headers['x-api-key'] || req.query.api_key;
-    if (!apiKey) {
-      return res.status(401).json({ error: 'Giriş üçün Google Gemini API Key tələb olunur' });
+    const cred = req.headers['x-api-key'] || req.headers['x-admin-password'] || req.query.api_key || req.query.password;
+    if (!cred) {
+      return res.status(401).json({ error: 'Giriş üçün parol tələb olunur / Password required' });
     }
-    try {
-      const { user, isNew } = await userManager.getOrCreateUser(apiKey);
-      req.user = user;
-      req.isNew = isNew;
-      next();
-    } catch (err) {
-      return res.status(401).json({ error: err.message });
+    if (!userManager.isAuthorizedPassword(cred)) {
+      return res.status(401).json({ error: 'Yanlış parol / Unauthorized' });
     }
+    req.user = userManager.getPrimaryUser();
+    next();
   }
 
-  // Auth API
-  app.post('/api/auth/login', async (req, res) => {
+  // Auth API: Single password login
+  app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
     try {
-      const { apiKey } = req.body;
-      if (!apiKey || !apiKey.trim()) {
-        return res.status(400).json({ error: 'Google Gemini API Key daxil edilməlidir' });
+      const password = req.body.password || req.body.apiKey;
+      if (!password || !password.trim()) {
+        return res.status(400).json({ error: 'Parol daxil edilməlidir / Password is required' });
       }
-      const { user, isNew } = await userManager.getOrCreateUser(apiKey);
+      const { user } = await userManager.verifyAdminLogin(password.trim());
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+      loginAttempts.delete(ip);
+
       res.json({
         success: true,
-        isNew,
-        message: isNew
-          ? 'Yeni profil avtomatik yaradıldı və bazaya qeyd olundu!'
-          : 'Mövcud profilinizə uğurla daxil oldunuz!',
+        message: 'Mövcud profilinizə uğurla daxil oldunuz!',
         user: {
           id: user.id,
           apiKey: user.apiKey,
@@ -181,7 +218,8 @@ function createServer() {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.json({
       ...waClient.getStatus(),
-      version: getAppVersion()
+      version: getAppVersion(),
+      geminiApiKey: req.user.apiKey || ''
     });
   });
 

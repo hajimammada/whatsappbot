@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { validateGeminiApiKey } = require('./ai_engine');
 
 const USERS_DB_PATH = path.join(__dirname, '..', 'data', 'users_db.json');
@@ -77,157 +78,46 @@ function saveUsersDb(db) {
   }
 }
 
-const DEFAULT_AUTHORIZED_KEY = Buffer.from(
-  'QVEuQWI4Uk42TGI3SVh3V2JwRnZHYWJ2b2FWaEViVHRXa25VQkgtMjhVR1ZyRnpwdndTand=',
-  'base64'
-).toString('utf-8');
-
-function getAuthorizedApiKey() {
-  const envKey = process.env.AUTHORIZED_API_KEY;
-  if (envKey && envKey.trim()) return envKey.trim();
-
-  const db = loadUsersDb();
-  if (db.authorizedApiKey && db.authorizedApiKey.trim()) {
-    return db.authorizedApiKey.trim();
-  }
-
-  return DEFAULT_AUTHORIZED_KEY;
-}
-
-function getRecoveryPassword() {
-  const envPass = process.env.RECOVERY_PASSWORD;
+function getAdminPassword() {
+  const envPass = process.env.ADMIN_PASSWORD || process.env.CABINET_PASSWORD || process.env.RECOVERY_PASSWORD;
   if (envPass && envPass.trim()) return envPass.trim();
 
   const db = loadUsersDb();
-  if (db.recoveryPassword && db.recoveryPassword.trim()) {
-    return db.recoveryPassword.trim();
+  if (db.adminPassword && db.adminPassword.trim()) {
+    return db.adminPassword.trim();
   }
 
-  return 'HajiRecover2026!';
+  return '';
 }
 
-function isAuthorizedApiKey(input) {
+function isAuthorizedPassword(input) {
   if (!input || typeof input !== 'string') return false;
-  const clean = input.trim();
-  return clean === getAuthorizedApiKey().trim() || clean === getRecoveryPassword().trim();
+  const expected = getAdminPassword();
+  if (!expected) return false;
+
+  const bufA = Buffer.from(input.trim());
+  const bufB = Buffer.from(expected);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
 }
 
-function isRecoveryPassword(input) {
-  if (!input || typeof input !== 'string') return false;
-  return input.trim() === getRecoveryPassword().trim();
-}
-
-function rekeyUserAccount(newApiKey) {
-  if (!newApiKey || typeof newApiKey !== 'string') {
-    throw new Error('Yeni API açar tələb olunur / New API key required');
+function getPrimaryUser(db = null) {
+  const database = db || loadUsersDb();
+  if (database.users && database.users['admin']) {
+    return database.users['admin'];
   }
-  const cleanNewKey = newApiKey.trim();
-  const db = loadUsersDb();
-  const oldKey = getAuthorizedApiKey();
-
-  // Find user under old key or pick the existing primary user
-  let user = db.users[oldKey] || Object.values(db.users || {})[0];
-
-  if (!user) {
-    const initial = getInitialDocuments();
-    user = {
-      id: 'usr_' + Date.now(),
-      apiKey: cleanNewKey,
-      createdAt: new Date().toISOString(),
-      lastActiveAt: new Date().toISOString(),
-      documents: initial.documents,
-      activeDocumentId: initial.activeDocumentId,
-      leads: [],
-      settings: {
-        human_takeover_minutes: 300,
-        auto_reply_enabled: true
-      }
-    };
-  } else {
-    // Delete old key mapping if different
-    if (user.apiKey && user.apiKey !== cleanNewKey && db.users[user.apiKey]) {
-      delete db.users[user.apiKey];
-    }
-    user.apiKey = cleanNewKey;
-    user.lastActiveAt = new Date().toISOString();
+  const existing = Object.values(database.users || {})[0];
+  if (existing) {
+    database.users['admin'] = existing;
+    saveUsersDb(database);
+    return existing;
   }
 
-  db.users[cleanNewKey] = user;
-  db.authorizedApiKey = cleanNewKey;
-  saveUsersDb(db);
-
-  // Update in-memory process.env
-  process.env.AUTHORIZED_API_KEY = cleanNewKey;
-  process.env.GEMINI_API_KEY = cleanNewKey;
-
-  // Persist into .env file if it exists
-  try {
-    const envPath = path.join(__dirname, '..', '.env');
-    if (fs.existsSync(envPath)) {
-      let content = fs.readFileSync(envPath, 'utf-8');
-      content = content.replace(/AUTHORIZED_API_KEY=.*/, `AUTHORIZED_API_KEY=${cleanNewKey}`);
-      content = content.replace(/GEMINI_API_KEY=.*/, `GEMINI_API_KEY=${cleanNewKey}`);
-      fs.writeFileSync(envPath, content, 'utf-8');
-    }
-  } catch (err) {
-    console.warn('Could not update .env file on disk:', err.message);
-  }
-
-  console.log(`🔑 Hesab uğurla yeni API açara keçirildi: ${cleanNewKey.substring(0, 8)}...`);
-  return user;
-}
-
-// Accepts EITHER Authorized Google Gemini API Key OR Second Master Recovery Password
-// If key matches either -> returns existing profile
-// If key is wrong -> throws error immediately
-async function getOrCreateUser(apiKey) {
-  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
-    throw new Error('Google Gemini API Key və ya Bərpa Parolu tələb olunur');
-  }
-
-  const cleanKey = apiKey.trim();
-
-  // Whitelist check: accepts EITHER Main API Key OR Second Recovery Password
-  if (!isAuthorizedApiKey(cleanKey)) {
-    throw new Error('Yanlış API açar və ya parol / Wrong API key or password');
-  }
-
-  const db = loadUsersDb();
-  const mainAuthorizedKey = getAuthorizedApiKey().trim();
-
-  // If user entered Second Recovery Password, map them to primary account profile!
-  const isSecondPass = isRecoveryPassword(cleanKey);
-  const targetKey = isSecondPass ? mainAuthorizedKey : cleanKey;
-
-  // 1. If it is already in database -> return existing profile
-  if (db.users[targetKey]) {
-    db.users[targetKey].lastActiveAt = new Date().toISOString();
-    saveUsersDb(db);
-    return { user: db.users[targetKey], isNew: false, isRecoveryLogin: isSecondPass };
-  }
-
-  // 2. Check if there was an existing user under an old key and re-key it
-  const existingUser = Object.values(db.users || {})[0];
-  if (existingUser) {
-    return { user: rekeyUserAccount(targetKey), isNew: false, isRecoveryLogin: isSecondPass };
-  }
-
-  // 3. Validate live against Google Gemini API (if not second pass)
-  if (!isSecondPass) {
-    const validation = await validateGeminiApiKey(targetKey);
-    if (!validation.valid) {
-      throw new Error(validation.error || 'Daxil edilən Google Gemini API Key etibarsızdır. Zəhmət olmasa aistudio.google.com-dan düzgün açar daxil edin.');
-    }
-  }
-
-  // 4. Create new profile
-  const newUserId = 'usr_' + Date.now();
-  const now = new Date().toISOString();
   const initial = getInitialDocuments();
-
+  const now = new Date().toISOString();
   const newUser = {
-    id: newUserId,
-    apiKey: targetKey,
+    id: 'usr_admin',
+    apiKey: process.env.GEMINI_API_KEY || '',
     createdAt: now,
     lastActiveAt: now,
     documents: initial.documents,
@@ -238,18 +128,70 @@ async function getOrCreateUser(apiKey) {
       auto_reply_enabled: true
     }
   };
-
-  db.users[targetKey] = newUser;
-  db.authorizedApiKey = targetKey;
-  saveUsersDb(db);
-  console.log(`✨ Səlahiyyətli profil yaradıldı: API Key = "${targetKey.substring(0, 8)}..."`);
-  return { user: newUser, isNew: true, isRecoveryLogin: isSecondPass };
+  database.users['admin'] = newUser;
+  saveUsersDb(database);
+  return newUser;
 }
 
-function getUser(apiKey) {
-  if (!apiKey) return null;
+function rekeyUserAccount(newApiKey) {
+  if (!newApiKey || typeof newApiKey !== 'string') {
+    throw new Error('Yeni Google Gemini API açar tələb olunur / New Gemini API key required');
+  }
+  const cleanNewKey = newApiKey.trim();
   const db = loadUsersDb();
-  return db.users[apiKey.trim()] || null;
+  const user = getPrimaryUser(db);
+
+  user.apiKey = cleanNewKey;
+  user.lastActiveAt = new Date().toISOString();
+  db.users['admin'] = user;
+  saveUsersDb(db);
+
+  process.env.GEMINI_API_KEY = cleanNewKey;
+
+  // Persist into .env file if it exists
+  try {
+    const envPath = path.join(__dirname, '..', '.env');
+    if (fs.existsSync(envPath)) {
+      let content = fs.readFileSync(envPath, 'utf-8');
+      if (content.includes('GEMINI_API_KEY=')) {
+        content = content.replace(/GEMINI_API_KEY=.*/, `GEMINI_API_KEY=${cleanNewKey}`);
+      } else {
+        content += `\nGEMINI_API_KEY=${cleanNewKey}\n`;
+      }
+      fs.writeFileSync(envPath, content, 'utf-8');
+    }
+  } catch (err) {
+    console.warn('Could not update .env file on disk:', err.message);
+  }
+
+  console.log(`🔑 Google Gemini API açarı kabinet üzərindən uğurla yeniləndi: ${cleanNewKey.substring(0, 8)}...`);
+  return user;
+}
+
+async function verifyAdminLogin(password) {
+  if (!password || typeof password !== 'string' || password.trim() === '') {
+    throw new Error('Parol daxil edilməlidir / Password is required');
+  }
+
+  if (!isAuthorizedPassword(password)) {
+    throw new Error('Yanlış parol / Wrong password');
+  }
+
+  const db = loadUsersDb();
+  const user = getPrimaryUser(db);
+  user.lastActiveAt = new Date().toISOString();
+  saveUsersDb(db);
+  return { user, isNew: false };
+}
+
+// Backward compatibility helper
+async function getOrCreateUser(passwordOrKey) {
+  return verifyAdminLogin(passwordOrKey);
+}
+
+function getUser(key) {
+  const db = loadUsersDb();
+  return (key && db.users[key]) ? db.users[key] : getPrimaryUser(db);
 }
 
 function getUserActiveDocument(user) {
@@ -262,7 +204,7 @@ function getUserActiveDocument(user) {
 
 function saveUserDocument(apiKey, doc) {
   const db = loadUsersDb();
-  const user = db.users[apiKey];
+  const user = getUser(apiKey);
   if (!user) throw new Error('İstifadəçi tapılmadı');
 
   user.documents = user.documents || [];
@@ -288,6 +230,7 @@ function saveUserDocument(apiKey, doc) {
     user.activeDocumentId = doc.id;
   }
 
+  db.users['admin'] = user;
   saveUsersDb(db);
   return user;
 }
@@ -304,12 +247,13 @@ function createUserDocument(apiKey, title, content, makeActive = false) {
 
 function setUserActiveDocument(apiKey, docId) {
   const db = loadUsersDb();
-  const user = db.users[apiKey];
+  const user = getUser(apiKey);
   if (!user) return false;
 
   const exists = (user.documents || []).some(d => d.id === docId);
   if (exists) {
     user.activeDocumentId = docId;
+    db.users['admin'] = user;
     saveUsersDb(db);
     return true;
   }
@@ -318,7 +262,7 @@ function setUserActiveDocument(apiKey, docId) {
 
 function deleteUserDocument(apiKey, docId) {
   const db = loadUsersDb();
-  const user = db.users[apiKey];
+  const user = getUser(apiKey);
   if (!user) throw new Error('İstifadəçi tapılmadı');
 
   user.documents = user.documents || [];
@@ -331,13 +275,14 @@ function deleteUserDocument(apiKey, docId) {
     user.activeDocumentId = user.documents[0].id;
   }
 
+  db.users['admin'] = user;
   saveUsersDb(db);
   return user;
 }
 
 function recordUserLead(apiKey, phone, lastMessage, analysis) {
   const db = loadUsersDb();
-  const user = db.users[apiKey];
+  const user = getUser(apiKey);
   if (!user) return;
 
   user.leads = user.leads || [];
@@ -387,13 +332,14 @@ function recordUserLead(apiKey, phone, lastMessage, analysis) {
     }
   }
 
+  db.users['admin'] = user;
   saveUsersDb(db);
   return lead;
 }
 
 function updateUserLeadStatus(apiKey, leadId, status, notes) {
   const db = loadUsersDb();
-  const user = db.users[apiKey];
+  const user = getUser(apiKey);
   if (!user) return null;
 
   user.leads = user.leads || [];
@@ -402,6 +348,7 @@ function updateUserLeadStatus(apiKey, leadId, status, notes) {
     lead.status = status;
     if (notes) lead.notes = notes;
     lead.updatedAt = new Date().toISOString();
+    db.users['admin'] = user;
     saveUsersDb(db);
     return lead;
   }
@@ -413,6 +360,10 @@ module.exports = {
   saveUsersDb,
   getOrCreateUser,
   getUser,
+  getPrimaryUser,
+  getAdminPassword,
+  isAuthorizedPassword,
+  verifyAdminLogin,
   getUserActiveDocument,
   saveUserDocument,
   createUserDocument,
@@ -420,9 +371,7 @@ module.exports = {
   deleteUserDocument,
   recordUserLead,
   updateUserLeadStatus,
-  getAuthorizedApiKey,
-  isAuthorizedApiKey,
-  getRecoveryPassword,
-  isRecoveryPassword,
-  rekeyUserAccount
+  rekeyUserAccount,
+  isAuthorizedApiKey: isAuthorizedPassword,
+  getAuthorizedApiKey: getAdminPassword
 };

@@ -1,10 +1,11 @@
 const assert = require('assert');
 const http = require('http');
 
-// Set test environment
+// Set test environment with clean password
 process.env.PORT = '3099';
-process.env.AUTHORIZED_API_KEY = 'mock_authorized_gemini_key_for_testing_12345';
-process.env.RECOVERY_PASSWORD = 'HajiRecover2026!';
+process.env.ADMIN_PASSWORD = 'HajiShield#2026!Bot';
+delete process.env.AUTHORIZED_API_KEY;
+delete process.env.RECOVERY_PASSWORD;
 
 const { createServer } = require('../src/server');
 const userManager = require('../src/user_manager');
@@ -40,14 +41,13 @@ async function runTests() {
   if (fs.existsSync(usersDbPath)) {
     originalDb = fs.readFileSync(usersDbPath, 'utf-8');
   }
-  console.log('🧪 Starting Dual-Password Authentication & Whitelist Tests...\n');
+  console.log('🧪 Starting Security & Admin Password Authentication Tests...\n');
 
   const app = createServer();
   const server = app.listen(3099);
 
   try {
-    const authorizedKey = 'mock_authorized_gemini_key_for_testing_12345';
-    const recoveryPass = 'HajiRecover2026!';
+    const adminPassword = 'HajiShield#2026!Bot';
     const wrongPass = 'completely_wrong_pass_99999';
 
     // -------------------------------------------------------------
@@ -64,126 +64,107 @@ async function runTests() {
     console.log('   ✅ Passed: Blocked unauthenticated status request with 401.');
 
     // -------------------------------------------------------------
-    // Test 2: Login with wrong pass MUST be rejected (401)
+    // Test 2: Login with wrong password or API key MUST be rejected (401)
     // -------------------------------------------------------------
-    console.log('2️⃣ Testing login with wrong key or password...');
+    console.log('2️⃣ Testing login with wrong password or arbitrary input...');
     const res2 = await makeRequest({
       hostname: 'localhost',
       port: 3099,
       path: '/api/auth/login',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
-    }, { apiKey: wrongPass });
+    }, { password: wrongPass });
 
-    assert.strictEqual(res2.status, 401, 'Expected 401 Unauthorized for wrong key/password');
-    assert.ok(res2.data.error.includes('Yanlış API açar') || res2.data.error.includes('Wrong API key'), 'Error should state Wrong API key or password');
+    assert.strictEqual(res2.status, 401, 'Expected 401 Unauthorized for wrong password');
+    assert.ok(res2.data.error.includes('Yanlış') || res2.data.error.includes('Wrong'), 'Error should state Wrong password');
     console.log(`   ✅ Passed: Rejected wrong input with message: "${res2.data.error}"`);
 
     // -------------------------------------------------------------
-    // Test 3: Login with Main API key MUST succeed (200)
+    // Test 3: Login with Admin Password MUST succeed (200)
     // -------------------------------------------------------------
-    console.log('3️⃣ Testing login with Primary Authorized API key...');
+    console.log('3️⃣ Testing login with Admin Password...');
     const res3 = await makeRequest({
       hostname: 'localhost',
       port: 3099,
       path: '/api/auth/login',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
-    }, { apiKey: authorizedKey });
+    }, { password: adminPassword });
 
-    assert.strictEqual(res3.status, 200, 'Expected 200 OK for authorized key');
-    assert.strictEqual(res3.data.user.apiKey, authorizedKey);
-    console.log('   ✅ Passed: Successfully authenticated primary authorized key!');
+    assert.strictEqual(res3.status, 200, 'Expected 200 OK for admin password');
+    assert.ok(res3.data.user, 'User object should be returned on successful login');
+    console.log('   ✅ Passed: Successfully authenticated admin password!');
 
     // -------------------------------------------------------------
-    // Test 4: Login with Second Recovery Password in the exact same field MUST succeed (200)
+    // Test 4: Access protected /api/status with valid password header MUST succeed (200)
     // -------------------------------------------------------------
-    console.log('4️⃣ Testing login with Second Recovery Password in the same API key field...');
+    console.log('4️⃣ Testing /api/status with valid admin password header...');
     const res4 = await makeRequest({
       hostname: 'localhost',
       port: 3099,
-      path: '/api/auth/login',
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    }, { apiKey: recoveryPass });
-
-    assert.strictEqual(res4.status, 200, 'Expected 200 OK for recovery password');
-    assert.strictEqual(res4.data.user.apiKey, authorizedKey, 'Recovery password should map to primary user account');
-    console.log(`   ✅ Passed: Recovery password successfully logged into primary user cabinet! (Resolved to: ${res4.data.user.apiKey})`);
+      path: '/api/status',
+      method: 'GET',
+      headers: { 'X-API-Key': adminPassword }
+    });
+    assert.strictEqual(res4.status, 200, 'Expected 200 OK for status with admin password');
+    assert.strictEqual(res4.data.version, 'v3.4.0');
+    console.log(`   ✅ Passed: Status returned successfully (Version: ${res4.data.version})`);
 
     // -------------------------------------------------------------
-    // Test 5: Access protected /api/status with authorized header MUST succeed (200)
+    // Test 5: In-cabinet API key update via POST /api/auth/update-key MUST succeed (200)
     // -------------------------------------------------------------
-    console.log('5️⃣ Testing /api/status with valid X-API-Key header...');
+    console.log('5️⃣ Testing in-cabinet Gemini API key update (/api/auth/update-key)...');
+    const newTestKey = 'mock_new_gemini_key_67890';
     const res5 = await makeRequest({
       hostname: 'localhost',
       port: 3099,
-      path: '/api/status',
-      method: 'GET',
-      headers: { 'X-API-Key': authorizedKey }
-    });
-    assert.strictEqual(res5.status, 200, 'Expected 200 OK for status with authorized key');
-    assert.ok(res5.data.version, 'Response should contain version info');
-    console.log(`   ✅ Passed: Status returned successfully (Version: ${res5.data.version})`);
-
-    // -------------------------------------------------------------
-    // Test 6: Access protected /api/status with Second Recovery Password in header MUST succeed (200)
-    // -------------------------------------------------------------
-    console.log('6️⃣ Testing /api/status with Second Recovery Password in X-API-Key header...');
-    const res6 = await makeRequest({
-      hostname: 'localhost',
-      port: 3099,
-      path: '/api/status',
-      method: 'GET',
-      headers: { 'X-API-Key': recoveryPass }
-    });
-    assert.strictEqual(res6.status, 200, 'Expected 200 OK for status with recovery password');
-    console.log('   ✅ Passed: Status accessible using second recovery password.');
-
-    // -------------------------------------------------------------
-    // Test 7: In-cabinet API key update via POST /api/auth/update-key MUST succeed (200)
-    // -------------------------------------------------------------
-    console.log('7️⃣ Testing in-cabinet API key update (/api/auth/update-key)...');
-    const newTestKey = 'mock_new_gemini_key_67890';
-    const res7 = await makeRequest({
-      hostname: 'localhost',
-      port: 3099,
       path: '/api/auth/update-key',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': authorizedKey
+        'X-API-Key': adminPassword
       }
     }, { newApiKey: newTestKey });
 
-    assert.strictEqual(res7.status, 200, 'Expected 200 OK for key update');
-    assert.strictEqual(res7.data.success, true);
-    assert.strictEqual(res7.data.user.apiKey, newTestKey);
+    assert.strictEqual(res5.status, 200, 'Expected 200 OK for key update');
+    assert.strictEqual(res5.data.success, true);
+    assert.strictEqual(res5.data.user.apiKey, newTestKey);
 
-    // Verify new key works for status
-    const res7b = await makeRequest({
+    // Verify /api/status returns the updated geminiApiKey
+    const res5b = await makeRequest({
       hostname: 'localhost',
       port: 3099,
       path: '/api/status',
       method: 'GET',
-      headers: { 'X-API-Key': newTestKey }
+      headers: { 'X-API-Key': adminPassword }
     });
-    assert.strictEqual(res7b.status, 200, 'Expected 200 OK with new key');
-    console.log('   ✅ Passed: Successfully updated API key in personal cabinet and validated new key!');
+    assert.strictEqual(res5b.status, 200);
+    assert.strictEqual(res5b.data.geminiApiKey, newTestKey);
+    console.log('   ✅ Passed: Successfully updated Gemini API key in personal cabinet!');
 
-    // Revert back to original authorizedKey
-    await makeRequest({
-      hostname: 'localhost',
-      port: 3099,
-      path: '/api/auth/update-key',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': newTestKey
+    // -------------------------------------------------------------
+    // Test 6: Brute force protection on login attempts
+    // -------------------------------------------------------------
+    console.log('6️⃣ Testing brute-force rate limiter on login endpoint...');
+    let hitRateLimit = false;
+    for (let i = 0; i < 12; i++) {
+      const rateRes = await makeRequest({
+        hostname: 'localhost',
+        port: 3099,
+        path: '/api/auth/login',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '192.168.1.50' }
+      }, { password: 'wrong_' + i });
+
+      if (rateRes.status === 429) {
+        hitRateLimit = true;
+        break;
       }
-    }, { newApiKey: authorizedKey });
+    }
+    assert.ok(hitRateLimit, 'Expected 429 Too Many Requests after excessive failed login attempts');
+    console.log('   ✅ Passed: Rate limiter actively blocked brute-force attempts with HTTP 429.');
 
-    console.log('\n🎉 ALL DUAL-PASSWORD & IN-CABINET KEY UPDATE TESTS PASSED PERFECTLY!');
+    console.log('\n🎉 ALL SECURITY, RATE LIMITING & PASSWORD-ONLY TESTS PASSED PERFECTLY!');
   } finally {
     server.close();
     if (originalDb !== null) {
