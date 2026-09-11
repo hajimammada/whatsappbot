@@ -21,7 +21,7 @@
         <div class="brand-text">
           <h1 class="brand-title">
             <span class="brand-name">whatsappbot.hajimammad.com</span>
-            <span class="brand-version" id="app-version">v3.4.8</span>
+            <span class="brand-version" id="app-version">v3.4.9</span>
           </h1>
         </div>
       </div>
@@ -73,20 +73,20 @@
 
           <!-- API Key Manager Box (Above QR Code) -->
           <div class="cabinet-apikey-box" style="margin: 0 0 16px 0; padding: 12px 14px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label for="cabinet-api-key-input" style="font-size: 12px; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
-                🔑 <span data-i18n="lbl_cabinet_api_key">Google Gemini API Açarınız:</span>
-              </label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <label for="cabinet-api-key-input" style="font-size: 12px; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; gap: 6px; margin: 0;">
+                  🔑 <span data-i18n="lbl_cabinet_api_key">Google Gemini API Açarınız:</span>
+                </label>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="font-size: 11px; color: var(--accent-blue); text-decoration: underline; display: inline-flex; align-items: center; gap: 3px;" data-i18n="link_ai_studio" title="Google AI Studio">
+                  Google AI Studio ↗
+                </a>
+              </div>
               <button type="button" id="btn-toggle-cabinet-key-vis" style="background: none; border: none; color: var(--accent-blue); cursor: pointer; font-size: 11px;">👁️ Göstər</button>
             </div>
             <div style="display: flex; gap: 8px;">
               <input type="password" id="cabinet-api-key-input" class="form-input" style="font-size: 12px; font-family: var(--font-mono); padding: 8px 10px;" placeholder="AIzaSy..." autocomplete="off">
               <button type="button" class="btn btn-primary btn-sm" id="btn-update-cabinet-api-key" style="white-space: nowrap; padding: 8px 14px; font-size: 12px;" data-i18n="btn_update_api_key">💾 Yenilə</button>
-            </div>
-            <div style="margin-top: 6px; display: flex; justify-content: flex-start;">
-              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="font-size: 11px; color: var(--accent-blue); text-decoration: underline; display: inline-flex; align-items: center; gap: 4px;" data-i18n="link_ai_studio">
-                🔗 Google AI Studio (Açar əldə et) ↗
-              </a>
             </div>
             <div id="cabinet-key-status-msg" class="hidden" style="margin-top: 8px; font-size: 12px; line-height: 1.4;"></div>
           </div>

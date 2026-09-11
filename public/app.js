@@ -13,9 +13,13 @@ document.addEventListener('DOMContentLoaded', () => {
       tab_data: "Məlumatlar",
       tab_test: "Test",
       status_connecting: "Qoşulur...",
-      status_connected: "Qoşuldu ✅",
+      status_connected: "Qoşuldu",
       status_waiting_qr: "QR Skan Edin",
       status_disconnected: "Bağlantı kəsildi",
+      wa_state_connected: "Aktiv",
+      wa_state_waiting_qr: "QR Gözlənilir",
+      wa_state_connecting: "Qoşulur...",
+      wa_state_disconnected: "Qoşulmayıb",
       auto_reply_on: "Avto-Cavab: Aktiv",
       auto_reply_off: "Avto-Cavab: Deaktiv",
       logout: "Çıxış",
@@ -58,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
       modal_submit: "Daxil Ol 🚀",
       lbl_cabinet_api_key: "Google Gemini API Açarınız:",
       btn_update_api_key: "💾 Yenilə",
-      link_ai_studio: "🔗 Google AI Studio (Açar əldə et) ↗",
+      link_ai_studio: "Google AI Studio ↗",
       msg_key_updated: "✅ API açarınız uğurla yeniləndi və saxlanıldı!",
       msg_key_updating: "⏳ Açar yoxlanılır və yenilənir...",
       msg_key_required: "⚠️ Zəhmət olmasa yeni API açarı daxil edin.",
@@ -72,9 +76,13 @@ document.addEventListener('DOMContentLoaded', () => {
       tab_data: "Данные",
       tab_test: "Тест",
       status_connecting: "Подключение...",
-      status_connected: "Подключено ✅",
+      status_connected: "Подключено",
       status_waiting_qr: "Сканируйте QR",
       status_disconnected: "Отключено",
+      wa_state_connected: "Активен",
+      wa_state_waiting_qr: "Ожидание QR",
+      wa_state_connecting: "Подключение...",
+      wa_state_disconnected: "Отключено",
       auto_reply_on: "Авто-ответ: Вкл",
       auto_reply_off: "Авто-ответ: Выкл",
       logout: "Выход",
@@ -117,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
       modal_submit: "Войти 🚀",
       lbl_cabinet_api_key: "Ваш Google Gemini API Ключ:",
       btn_update_api_key: "💾 Обновить",
-      link_ai_studio: "🔗 Google AI Studio (Получить ключ) ↗",
+      link_ai_studio: "Google AI Studio ↗",
       msg_key_updated: "✅ Ваш API ключ успешно обновлен и сохранен!",
       msg_key_updating: "⏳ Проверка и обновление ключа...",
       msg_key_required: "⚠️ Пожалуйста, введите новый API ключ.",
@@ -131,9 +139,13 @@ document.addEventListener('DOMContentLoaded', () => {
       tab_data: "Data",
       tab_test: "Test",
       status_connecting: "Connecting...",
-      status_connected: "Connected ✅",
+      status_connected: "Connected",
       status_waiting_qr: "Scan QR",
       status_disconnected: "Disconnected",
+      wa_state_connected: "Active",
+      wa_state_waiting_qr: "Scan QR",
+      wa_state_connecting: "Connecting...",
+      wa_state_disconnected: "Offline",
       auto_reply_on: "Auto-Reply: ON",
       auto_reply_off: "Auto-Reply: OFF",
       logout: "Logout",
@@ -176,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
       modal_submit: "Sign In 🚀",
       lbl_cabinet_api_key: "Your Google Gemini API Key:",
       btn_update_api_key: "💾 Update",
-      link_ai_studio: "🔗 Google AI Studio (Get API Key) ↗",
+      link_ai_studio: "Google AI Studio ↗",
       msg_key_updated: "✅ API Key successfully updated and saved!",
       msg_key_updating: "⏳ Validating and updating key...",
       msg_key_required: "⚠️ Please enter a new API key.",
@@ -213,6 +225,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (typeof updateToggleKeyLabels === 'function') {
       updateToggleKeyLabels();
+    }
+    if (typeof lastConnectionStatusData !== 'undefined' && lastConnectionStatusData) {
+      updateConnectionStatus(lastConnectionStatusData);
     }
   }
 
@@ -617,7 +632,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  let lastConnectionStatusData = null;
+
   function updateConnectionStatus(data) {
+    if (!data) return;
+    lastConnectionStatusData = data;
     const status = data.status || 'disconnected';
     statusDot.className = 'status-dot ' + status;
     const dict = I18N[currentLang];
@@ -628,8 +647,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (status === 'connected') {
       statusText.textContent = dict.status_connected;
-      waStateBadge.textContent = 'Active';
-      waStateBadge.className = 'badge badge-high';
+      waStateBadge.textContent = dict.wa_state_connected || 'Aktiv';
+      waStateBadge.className = 'badge badge-connected';
       qrContainer.classList.add('hidden');
       connectedInfo.classList.remove('hidden');
 
@@ -638,8 +657,8 @@ document.addEventListener('DOMContentLoaded', () => {
       userDisplayJid.textContent = user.id ? `+${user.id.replace(/@.+/, '')}` : 'Connected';
     } else if (status === 'waiting_qr') {
       statusText.textContent = dict.status_waiting_qr;
-      waStateBadge.textContent = 'QR';
-      waStateBadge.className = 'badge';
+      waStateBadge.textContent = dict.wa_state_waiting_qr || 'QR';
+      waStateBadge.className = 'badge badge-waiting-qr';
       qrContainer.classList.remove('hidden');
       connectedInfo.classList.add('hidden');
       if (data.qrCodeDataUrl) {
@@ -647,15 +666,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } else if (status === 'connecting') {
       statusText.textContent = dict.status_connecting;
-      waStateBadge.textContent = '...';
-      waStateBadge.className = 'badge';
+      waStateBadge.textContent = dict.wa_state_connecting || '...';
+      waStateBadge.className = 'badge badge-connecting';
       qrContainer.classList.remove('hidden');
       connectedInfo.classList.add('hidden');
       qrImageWrapper.innerHTML = `<div class="spinner"></div><p class="qr-hint">${dict.status_connecting}</p>`;
     } else {
       statusText.textContent = dict.status_disconnected;
-      waStateBadge.textContent = 'Offline';
-      waStateBadge.className = 'badge badge-danger';
+      waStateBadge.textContent = dict.wa_state_disconnected || 'Offline';
+      waStateBadge.className = 'badge badge-disconnected';
       qrContainer.classList.remove('hidden');
       connectedInfo.classList.add('hidden');
       qrImageWrapper.innerHTML = `<p style="color: var(--danger-color); padding: 20px;">${dict.status_disconnected}.</p>`;
