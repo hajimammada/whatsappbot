@@ -73,9 +73,16 @@ async function sendTelegramAlert(lead, viewingRequest) {
   });
 }
 
-async function recordLead(phoneNumber, rawMessage, aiAnalysis = null, contactName = null) {
+async function recordLead(phoneNumber, rawMessage, aiAnalysis = null, contactName = null, jid = null) {
   const leads = getLeads();
-  let lead = leads.find(l => l.phoneNumber === phoneNumber);
+  const cleanPhone = String(phoneNumber || '').replace(/@.+/, '').replace(/\D/g, '');
+  const cleanJid = jid || (phoneNumber && String(phoneNumber).includes('@') ? phoneNumber : null);
+
+  let lead = leads.find(l => 
+    (cleanPhone && l.phoneNumber === cleanPhone) ||
+    (cleanPhone && l.lid === cleanPhone) ||
+    (cleanJid && l.jid === cleanJid)
+  );
 
   const isViewing = Boolean(aiAnalysis && aiAnalysis.is_viewing_request);
   const callerName = (aiAnalysis && aiAnalysis.detected_name) || contactName || (lead ? lead.name : null);
@@ -88,10 +95,14 @@ async function recordLead(phoneNumber, rawMessage, aiAnalysis = null, contactNam
     timestamp: now
   };
 
+  const isLid = cleanJid ? cleanJid.endsWith('@lid') : cleanPhone.length > 13;
+
   if (!lead) {
     lead = {
       id: 'lead_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-      phoneNumber: phoneNumber,
+      phoneNumber: cleanPhone,
+      jid: cleanJid,
+      lid: isLid ? cleanPhone : null,
       name: callerName || 'WhatsApp İstifadəçisi',
       status: isViewing ? 'viewing_requested' : 'inquired',
       interestLevel: isViewing ? 'high' : 'medium',
@@ -108,6 +119,10 @@ async function recordLead(phoneNumber, rawMessage, aiAnalysis = null, contactNam
     lead.lastContact = now;
     lead.lastMessage = rawMessage;
     lead.historyCount = (lead.historyCount || 1) + 1;
+    if (cleanJid && !lead.jid) lead.jid = cleanJid;
+    if (isLid && !lead.lid) lead.lid = cleanPhone;
+    if (!isLid && lead.phoneNumber !== cleanPhone) lead.phoneNumber = cleanPhone;
+
     lead.messages = lead.messages || [];
     // Avoid exact duplicate adjacent messages
     const lastExisting = lead.messages[lead.messages.length - 1];
@@ -156,9 +171,48 @@ function updateLeadStatus(id, newStatus, notes) {
   return null;
 }
 
+function migrateLeadLidToPhone(lid, phone) {
+  const leads = getLeads();
+  const cleanLid = String(lid).replace(/@.+/, '').replace(/\D/g, '');
+  const cleanPhone = String(phone).replace(/@.+/, '').replace(/\D/g, '');
+  if (!cleanLid || !cleanPhone || cleanLid === cleanPhone) return false;
+
+  let modified = false;
+  for (const l of leads) {
+    if (l.phoneNumber === cleanLid || l.lid === cleanLid) {
+      l.lid = cleanLid;
+      l.phoneNumber = cleanPhone;
+      modified = true;
+    }
+  }
+  if (modified) {
+    saveLeadsList(leads);
+  }
+  return modified;
+}
+
+function updateLeadPhone(idOrOldPhone, newPhone) {
+  const leads = getLeads();
+  const cleanNew = String(newPhone).replace(/@.+/, '').replace(/\D/g, '');
+  if (!cleanNew) return null;
+
+  const lead = leads.find(l => l.id === idOrOldPhone || l.phoneNumber === idOrOldPhone || l.lid === idOrOldPhone);
+  if (lead) {
+    if (lead.phoneNumber && lead.phoneNumber !== cleanNew && !lead.lid) {
+      lead.lid = lead.phoneNumber;
+    }
+    lead.phoneNumber = cleanNew;
+    saveLeadsList(leads);
+    return lead;
+  }
+  return null;
+}
+
 module.exports = {
   getLeads,
   recordLead,
   updateLeadStatus,
+  migrateLeadLidToPhone,
+  updateLeadPhone,
   sendTelegramAlert
 };

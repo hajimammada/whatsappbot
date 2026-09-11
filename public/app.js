@@ -916,30 +916,35 @@ document.addEventListener('DOMContentLoaded', () => {
       const contactDate = l.lastContact || l.firstContact || new Date().toISOString();
       const dateFormatted = new Date(contactDate).toLocaleString(currentLang === 'en' ? 'en-US' : (currentLang === 'ru' ? 'ru-RU' : 'az-AZ'), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-      const chatStatus = chatStatuses[l.phoneNumber];
+      const chatStatus = chatStatuses[l.phoneNumber] || (l.lid && chatStatuses[l.lid]);
       const isPaused = chatStatus && chatStatus.isPaused;
       const remainingMins = chatStatus?.remainingMinutes || 30;
       const remainingFormatted = formatRemainingTime(remainingMins);
 
+      const targetPhone = l.phoneNumber || l.lid;
       const botControlHtml = isPaused
         ? `<div class="bot-control-cell">
              <span class="badge-lead badge-paused">${dict.bot_paused} (${remainingFormatted})</span>
-             <button class="btn btn-primary btn-xs btn-resume-bot" data-phone="${l.phoneNumber}">${dict.btn_resume}</button>
+             <button class="btn btn-primary btn-xs btn-resume-bot" data-phone="${targetPhone}">${dict.btn_resume}</button>
            </div>`
         : `<div class="bot-control-cell">
              <span class="badge-lead badge-bot-active">${dict.bot_active}</span>
-             <button class="btn btn-secondary btn-xs btn-pause-bot" data-phone="${l.phoneNumber}">${dict.btn_pause}</button>
+             <button class="btn btn-secondary btn-xs btn-pause-bot" data-phone="${targetPhone}">${dict.btn_pause}</button>
            </div>`;
 
       const msgCountBadge = (l.messages && l.messages.length > 1) 
         ? `<span style="display: inline-block; font-size: 10px; background: rgba(59,130,246,0.2); color: var(--accent-blue); padding: 1px 5px; border-radius: 4px; margin-left: 4px;">${l.messages.length}</span>` 
         : '';
 
+      const isLikelyLid = (l.lid && l.lid === l.phoneNumber) || (l.phoneNumber && l.phoneNumber.length >= 14 && !l.phoneNumber.startsWith('994') && !l.phoneNumber.startsWith('90') && !l.phoneNumber.startsWith('7') && !l.phoneNumber.startsWith('1'));
+
       return `
         <tr>
           <td>
             <strong>${escapeHtml(l.name || 'User')}</strong>${msgCountBadge}<br>
-            <span style="font-family: var(--font-mono); color: var(--accent-blue);">+${l.phoneNumber}</span>
+            <span style="font-family: var(--font-mono); color: var(--accent-blue);">+${escapeHtml(l.phoneNumber)}</span>
+            ${isLikelyLid ? '<span class="badge badge-warning" style="font-size: 9px; padding: 1px 4px; margin-left: 3px;" title="WhatsApp Daxili İdentifikatoru (LID)">ID</span>' : ''}
+            <button class="btn btn-link btn-xs btn-edit-lead-phone" data-id="${l.id}" data-phone="${escapeHtml(l.phoneNumber)}" title="Telefon nömrəsini düzəlt / Daxil et" style="cursor: pointer; padding: 0 4px; font-size: 12px; text-decoration: none; border: none; background: transparent;">✏️</button>
           </td>
           <td>
             <span class="badge-lead ${isViewing ? 'badge-status-viewing' : ''}">
@@ -966,30 +971,99 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Click handlers for Resume & Pause
     document.querySelectorAll('.btn-resume-bot').forEach(btn => {
-      btn.addEventListener('click', async () => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
         const phone = btn.getAttribute('data-phone');
+        btn.disabled = true;
         btn.textContent = '...';
+
+        // Optimistic UI state update so user sees instant feedback
+        if (chatStatuses[phone]) {
+          chatStatuses[phone].isPaused = false;
+          chatStatuses[phone].remainingMinutes = 0;
+        }
+
         try {
-          await authFetch(`/api/chat/${phone}/resume`, { method: 'POST' });
+          const res = await authFetch(`/api/chat/${encodeURIComponent(phone)}/resume`, { method: 'POST' });
+          const data = await res.json();
+          if (data && data.phone) {
+            chatStatuses[data.phone] = { isPaused: false, remainingMinutes: 0 };
+          }
           await loadLeads();
         } catch (e) {
-          console.error(e);
+          console.error('Error resuming bot:', e);
+          await loadLeads();
         }
       });
     });
 
     document.querySelectorAll('.btn-pause-bot').forEach(btn => {
-      btn.addEventListener('click', async () => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
         const phone = btn.getAttribute('data-phone');
+        btn.disabled = true;
         btn.textContent = '...';
+
+        // Optimistic UI state update
+        if (!chatStatuses[phone]) chatStatuses[phone] = {};
+        chatStatuses[phone].isPaused = true;
+        chatStatuses[phone].remainingMinutes = 30;
+
         try {
-          await authFetch(`/api/chat/${phone}/pause`, {
+          const res = await authFetch(`/api/chat/${encodeURIComponent(phone)}/pause`, {
             method: 'POST',
             body: JSON.stringify({ minutes: 30 })
           });
+          const data = await res.json();
+          if (data && data.phone) {
+            chatStatuses[data.phone] = { isPaused: true, remainingMinutes: data.remainingMinutes || 30 };
+          }
           await loadLeads();
         } catch (e) {
-          console.error(e);
+          console.error('Error pausing bot:', e);
+          await loadLeads();
+        }
+      });
+    });
+
+    // Edit contact phone number handler
+    document.querySelectorAll('.btn-edit-lead-phone').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const leadId = btn.getAttribute('data-id');
+        const currentPhone = btn.getAttribute('data-phone') || '';
+
+        const promptText = currentLang === 'en'
+          ? 'Enter real international phone number (e.g. 994501234567):'
+          : (currentLang === 'ru'
+            ? 'Введите реальный международный номер телефона (напр: 994501234567):'
+            : 'Müştərinin real beynəlxalq telefon nömrəsini daxil edin (məs: 994501234567):');
+
+        const defaultVal = (currentPhone.length >= 14 || currentPhone.startsWith('104')) ? '' : currentPhone;
+        const input = prompt(promptText, defaultVal);
+        if (!input || !input.trim()) return;
+
+        const cleanPhone = input.trim().replace(/\D/g, '');
+        if (cleanPhone.length < 8) {
+          alert(currentLang === 'en' ? 'Please enter a valid phone number.' : 'Zəhmət olmasa düzgün telefon nömrəsi daxil edin.');
+          return;
+        }
+
+        btn.textContent = '...';
+        try {
+          const res = await authFetch(`/api/leads/${encodeURIComponent(leadId)}/phone`, {
+            method: 'POST',
+            body: JSON.stringify({ phoneNumber: cleanPhone })
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || 'Nömrə yenilənmədi');
+          }
+          await loadLeads();
+        } catch (err) {
+          alert('Xəta: ' + err.message);
+          btn.textContent = '✏️';
         }
       });
     });

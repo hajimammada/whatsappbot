@@ -6,7 +6,7 @@ const { execSync } = require('child_process');
 
 const waClient = require('./whatsapp_client');
 const userManager = require('./user_manager');
-const { getLeads, updateLeadStatus } = require('./lead_manager');
+const { getLeads, updateLeadStatus, updateLeadPhone } = require('./lead_manager');
 const { generateAIResponse, getAgentSettings, validateGeminiApiKey } = require('./ai_engine');
 
 function getAppVersion() {
@@ -39,7 +39,7 @@ function getAppVersion() {
     // Git command not available
   }
 
-  return 'v3.4.7';
+  return 'v3.4.8';
 }
 
 function createServer() {
@@ -406,6 +406,22 @@ function createServer() {
       res.json({ success: true, lead: updated });
     } else {
       res.status(404).json({ error: 'Lead not found' });
+    }
+  });
+
+  // Update Contact Phone Number (e.g. resolve from LID to real Phone)
+  app.post('/api/leads/:id/phone', requireAuth, (req, res) => {
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) return res.status(400).json({ error: 'Telefon nömrəsi tələb olunur' });
+    const updated = updateLeadPhone(req.params.id, phoneNumber);
+    if (updated) {
+      if (updated.lid && waClient.saveLidMapping) {
+        waClient.saveLidMapping(updated.lid, updated.phoneNumber);
+      }
+      broadcastSSE('leads_updated', {});
+      res.json({ success: true, lead: updated });
+    } else {
+      res.status(404).json({ error: 'Lead tapılmadı' });
     }
   });
 

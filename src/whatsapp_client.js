@@ -6,10 +6,11 @@ const path = require('path');
 const fs = require('fs');
 
 const { generateAIResponse, getAgentSettings } = require('./ai_engine');
-const { recordLead } = require('./lead_manager');
+const { recordLead, migrateLeadLidToPhone } = require('./lead_manager');
 const pkg = require('../package.json');
 
 const AUTH_DIR = path.join(__dirname, '..', 'auth_info_baileys');
+const LID_MAPPINGS_FILE = path.join(__dirname, '..', 'data', 'lid_mappings.json');
 
 class WhatsAppClient {
   constructor() {
@@ -21,9 +22,99 @@ class WhatsAppClient {
     this.autoReplyEnabled = process.env.AUTO_REPLY_ENABLED !== 'false';
     this.recentMessages = [];
     this.cooldowns = new Map(); // sender -> timestamp
-    this.humanTakeovers = new Map(); // remoteJid -> timestamp
+    this.humanTakeovers = new Map(); // remoteJid or phone -> timestamp
     this.botSentMessageIds = new Set(); // message ID -> true
     this.eventListeners = [];
+    this.lidToPhoneMap = new Map(); // cleanLid -> cleanPhone
+    this.phoneToLidMap = new Map(); // cleanPhone -> cleanLid
+    this.loadLidMappings();
+  }
+
+  loadLidMappings() {
+    try {
+      if (fs.existsSync(LID_MAPPINGS_FILE)) {
+        const raw = fs.readFileSync(LID_MAPPINGS_FILE, 'utf-8');
+        const data = JSON.parse(raw || '{}');
+        for (const [lid, phone] of Object.entries(data)) {
+          const cleanL = String(lid).replace(/@.+/, '').replace(/\D/g, '');
+          const cleanP = String(phone).replace(/@.+/, '').replace(/\D/g, '');
+          if (cleanL && cleanP) {
+            this.lidToPhoneMap.set(cleanL, cleanP);
+            this.phoneToLidMap.set(cleanP, cleanL);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load lid_mappings.json:', e);
+    }
+  }
+
+  saveLidMapping(lidRaw, phoneRaw) {
+    if (!lidRaw || !phoneRaw) return;
+    const cleanLid = String(lidRaw).replace(/@.+/, '').replace(/\D/g, '');
+    const cleanPhone = String(phoneRaw).replace(/@.+/, '').replace(/\D/g, '');
+    if (!cleanLid || !cleanPhone || cleanLid === cleanPhone) return;
+
+    this.lidToPhoneMap.set(cleanLid, cleanPhone);
+    this.phoneToLidMap.set(cleanPhone, cleanLid);
+
+    try {
+      const dir = path.dirname(LID_MAPPINGS_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const obj = {};
+      for (const [l, p] of this.lidToPhoneMap.entries()) {
+        obj[l] = p;
+      }
+      fs.writeFileSync(LID_MAPPINGS_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('Could not save lid_mappings.json:', e);
+    }
+
+    try {
+      migrateLeadLidToPhone(cleanLid, cleanPhone);
+    } catch (e) {
+      // Ignored
+    }
+  }
+
+  resolveContactPhone(remoteJid, msg = null) {
+    const rawClean = String(remoteJid || '').replace(/@.+/, '').replace(/\D/g, '');
+    const isLid = String(remoteJid || '').endsWith('@lid');
+
+    // 1. Check if Baileys provides real phone in senderPn or participantPn
+    const senderPn = msg?.key?.senderPn || msg?.key?.participantPn;
+    if (senderPn) {
+      const pnClean = String(senderPn).replace(/@.+/, '').replace(/\D/g, '');
+      if (pnClean && pnClean !== rawClean) {
+        if (isLid) {
+          this.saveLidMapping(rawClean, pnClean);
+        }
+        return {
+          phone: pnClean,
+          lid: isLid ? rawClean : null,
+          isLid: isLid,
+          resolved: true
+        };
+      }
+    }
+
+    // 2. Check if we already have a saved mapping for this LID
+    if (isLid && this.lidToPhoneMap.has(rawClean)) {
+      return {
+        phone: this.lidToPhoneMap.get(rawClean),
+        lid: rawClean,
+        isLid: true,
+        resolved: true
+      };
+    }
+
+    // 3. Fallback: regular phone or unmapped LID
+    return {
+      phone: rawClean,
+      lid: isLid ? rawClean : null,
+      isLid: isLid,
+      resolved: !isLid
+    };
   }
 
   onEvent(callback) {
@@ -46,29 +137,130 @@ class WhatsAppClient {
   }
 
   resumeBotForChat(phoneOrJid) {
-    const jid = phoneOrJid.includes('@') ? phoneOrJid : `${phoneOrJid}@s.whatsapp.net`;
-    this.humanTakeovers.delete(jid);
-    const phone = phoneOrJid.replace(/@.+/, '');
-    console.log(`🤖 +${phone} üçün bot panel üzərindən dərhal yenidən aktiv edildi.`);
+    const raw = String(phoneOrJid || '').trim();
+    const clean = raw.replace(/@.+/, '').replace(/\D/g, '');
+    const mappedPhone = this.lidToPhoneMap.get(clean);
+    const mappedLid = this.phoneToLidMap.get(clean);
+
+    const keysToDelete = new Set([
+      raw,
+      clean,
+      `${clean}@s.whatsapp.net`,
+      `${clean}@lid`
+    ]);
+    if (mappedPhone) {
+      keysToDelete.add(mappedPhone);
+      keysToDelete.add(`${mappedPhone}@s.whatsapp.net`);
+    }
+    if (mappedLid) {
+      keysToDelete.add(mappedLid);
+      keysToDelete.add(`${mappedLid}@lid`);
+    }
+
+    // Clear all matching variations in humanTakeovers
+    for (const key of Array.from(this.humanTakeovers.keys())) {
+      if (
+        keysToDelete.has(key) ||
+        key.includes(clean) ||
+        (mappedPhone && key.includes(mappedPhone)) ||
+        (mappedLid && key.includes(mappedLid))
+      ) {
+        this.humanTakeovers.delete(key);
+      }
+    }
+
+    console.log(`🤖 +${clean} üçün bot panel üzərindən dərhal yenidən aktiv edildi.`);
     this.notifySubscribers('chat_status_updated', {
-      phone: phone,
+      phone: clean,
       isPaused: false,
       remainingMinutes: 0
     });
-    return { success: true, phone, isPaused: false };
+    if (mappedPhone && mappedPhone !== clean) {
+      this.notifySubscribers('chat_status_updated', {
+        phone: mappedPhone,
+        isPaused: false,
+        remainingMinutes: 0
+      });
+    }
+    if (mappedLid && mappedLid !== clean) {
+      this.notifySubscribers('chat_status_updated', {
+        phone: mappedLid,
+        isPaused: false,
+        remainingMinutes: 0
+      });
+    }
+    return { success: true, phone: clean, isPaused: false };
   }
 
   pauseBotForChat(phoneOrJid, minutes = 300) {
-    const jid = phoneOrJid.includes('@') ? phoneOrJid : `${phoneOrJid}@s.whatsapp.net`;
-    this.humanTakeovers.set(jid, Date.now());
-    const phone = phoneOrJid.replace(/@.+/, '');
-    console.log(`⏸️ +${phone} üçün bot panel üzərindən ${minutes} dəqiqəlik (${Math.round(minutes/60)} saatlıq) dayandırıldı.`);
+    const raw = String(phoneOrJid || '').trim();
+    const clean = raw.replace(/@.+/, '').replace(/\D/g, '');
+    const now = Date.now();
+    const mappedPhone = this.lidToPhoneMap.get(clean);
+    const mappedLid = this.phoneToLidMap.get(clean);
+
+    this.humanTakeovers.set(raw, now);
+    this.humanTakeovers.set(clean, now);
+    this.humanTakeovers.set(`${clean}@s.whatsapp.net`, now);
+    this.humanTakeovers.set(`${clean}@lid`, now);
+
+    if (mappedPhone) {
+      this.humanTakeovers.set(mappedPhone, now);
+      this.humanTakeovers.set(`${mappedPhone}@s.whatsapp.net`, now);
+    }
+    if (mappedLid) {
+      this.humanTakeovers.set(mappedLid, now);
+      this.humanTakeovers.set(`${mappedLid}@lid`, now);
+    }
+
+    console.log(`⏸️ +${clean} üçün bot panel üzərindən ${minutes} dəqiqəlik (${Math.round(minutes/60)} saatlıq) dayandırıldı.`);
     this.notifySubscribers('chat_status_updated', {
-      phone: phone,
+      phone: clean,
       isPaused: true,
       remainingMinutes: minutes
     });
-    return { success: true, phone, isPaused: true, remainingMinutes: minutes };
+    if (mappedPhone && mappedPhone !== clean) {
+      this.notifySubscribers('chat_status_updated', {
+        phone: mappedPhone,
+        isPaused: true,
+        remainingMinutes: minutes
+      });
+    }
+    return { success: true, phone: clean, isPaused: true, remainingMinutes: minutes };
+  }
+
+  isChatPaused(remoteJid) {
+    const settings = getAgentSettings();
+    const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 30;
+    if (takeoverMinutes <= 0) return false;
+
+    const raw = String(remoteJid || '');
+    const clean = raw.replace(/@.+/, '').replace(/\D/g, '');
+    const mappedPhone = this.lidToPhoneMap.get(clean);
+    const mappedLid = this.phoneToLidMap.get(clean);
+
+    const checkKeys = [
+      raw,
+      clean,
+      `${clean}@s.whatsapp.net`,
+      `${clean}@lid`
+    ];
+    if (mappedPhone) {
+      checkKeys.push(mappedPhone, `${mappedPhone}@s.whatsapp.net`);
+    }
+    if (mappedLid) {
+      checkKeys.push(mappedLid, `${mappedLid}@lid`);
+    }
+
+    const now = Date.now();
+    const windowMs = takeoverMinutes * 60 * 1000;
+    for (const k of checkKeys) {
+      const ts = this.humanTakeovers.get(k);
+      if (ts && (now - ts) < windowMs) {
+        return true;
+      }
+    }
+    return false;
   }
 
   getAllChatStatuses() {
@@ -82,12 +274,19 @@ class WhatsAppClient {
       const totalMs = takeoverMinutes * 60 * 1000;
       if (elapsedMs < totalMs) {
         const remainingMinutes = Math.ceil((totalMs - elapsedMs) / 60000);
-        const phone = jid.replace(/@.+/, '');
-        result[phone] = {
+        const clean = jid.replace(/@.+/, '').replace(/\D/g, '');
+        const statusObj = {
           isPaused: true,
           remainingMinutes: remainingMinutes,
           pausedAt: new Date(timestamp).toISOString()
         };
+        if (clean) {
+          result[clean] = statusObj;
+          const mappedPhone = this.lidToPhoneMap.get(clean);
+          if (mappedPhone) result[mappedPhone] = statusObj;
+          const mappedLid = this.phoneToLidMap.get(clean);
+          if (mappedLid) result[mappedLid] = statusObj;
+        }
       }
     }
     return result;
@@ -184,20 +383,60 @@ class WhatsAppClient {
       }
     });
 
+    this.socket.ev.on('chats.phoneNumberShare', async ({ lid, jid }) => {
+      if (lid && jid) {
+        console.log(`🔗 WhatsApp LID nömrə ilə əlaqələndirildi: ${lid} -> ${jid}`);
+        this.saveLidMapping(lid, jid);
+        this.notifySubscribers('leads_updated', {});
+      }
+    });
+
+    this.socket.ev.on('contacts.upsert', async (contacts) => {
+      for (const c of contacts) {
+        if (c.lid && c.id && c.id.endsWith('@s.whatsapp.net')) {
+          this.saveLidMapping(c.lid, c.id);
+        }
+        if (c.id && c.id.endsWith('@lid') && c.phoneNumber) {
+          this.saveLidMapping(c.id, c.phoneNumber);
+        }
+      }
+    });
+
+    this.socket.ev.on('contacts.update', async (contacts) => {
+      for (const c of contacts) {
+        if (c.lid && c.id && c.id.endsWith('@s.whatsapp.net')) {
+          this.saveLidMapping(c.lid, c.id);
+        }
+      }
+    });
+
     this.socket.ev.on('messaging-history.set', async ({ chats, contacts, messages }) => {
       try {
+        if (contacts && contacts.length > 0) {
+          for (const c of contacts) {
+            if (c.lid && c.id && c.id.endsWith('@s.whatsapp.net')) {
+              this.saveLidMapping(c.lid, c.id);
+            }
+            if (c.id && c.id.endsWith('@lid') && c.phoneNumber) {
+              this.saveLidMapping(c.id, c.phoneNumber);
+            }
+          }
+        }
+
         if (messages && messages.length > 0) {
           console.log(`📥 WhatsApp chat tarixçəsi sinxronlaşdırılır (${messages.length} mesaj)...`);
           for (const msg of messages) {
             const remoteJid = msg.key?.remoteJid;
             if (!remoteJid || remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') continue;
-            const senderPhone = remoteJid.replace(/@.+/, '');
+
+            const resolved = this.resolveContactPhone(remoteJid, msg);
+            const senderPhone = resolved.phone;
             const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || '';
             if (!text || text.trim() === '') continue;
 
             const fromMe = Boolean(msg.key?.fromMe);
             const pushName = msg.pushName || (fromMe ? 'Siz' : 'WhatsApp İstifadəçisi');
-            await recordLead(senderPhone, fromMe ? `Siz: ${text}` : text, null, fromMe ? null : pushName);
+            await recordLead(senderPhone, fromMe ? `Siz: ${text}` : text, null, fromMe ? null : pushName, remoteJid);
 
             const msgTimestamp = msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000).toISOString() : new Date().toISOString();
             const logEntry = {
@@ -230,7 +469,8 @@ class WhatsAppClient {
         // Ignore group chats and status broadcasts
         if (remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') continue;
 
-        const senderPhone = remoteJid.replace(/@.+/, '');
+        const resolved = this.resolveContactPhone(remoteJid, msg);
+        const senderPhone = resolved.phone;
 
         // Ignore messages sent by the bot itself (prevent self-pause echo loop)
         if (msg.key.id && this.botSentMessageIds.has(msg.key.id)) {
@@ -256,14 +496,8 @@ class WhatsAppClient {
           const settings = getAgentSettings();
           const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 30;
           if (takeoverMinutes > 0) {
-            this.humanTakeovers = this.humanTakeovers || new Map();
-            this.humanTakeovers.set(remoteJid, Date.now());
+            this.pauseBotForChat(remoteJid, takeoverMinutes);
             console.log(`👤 Siz +${senderPhone} ilə şəxsən söhbətə daxil oldunuz. Bot bu çatda ${takeoverMinutes} dəqiqə avtomatik susacaq.`);
-            this.notifySubscribers('chat_status_updated', {
-              phone: senderPhone,
-              isPaused: true,
-              remainingMinutes: takeoverMinutes
-            });
           }
 
           // Record owner's outgoing message in recentMessages and leads table
@@ -280,7 +514,7 @@ class WhatsAppClient {
           if (this.recentMessages.length > 100) this.recentMessages.shift();
           this.notifySubscribers('new_message', outgoingLog);
 
-          await recordLead(senderPhone, `Siz: ${text}`, null, null);
+          await recordLead(senderPhone, `Siz: ${text}`, null, null, remoteJid);
           this.notifySubscribers('leads_updated', {});
           continue;
         }
@@ -290,7 +524,7 @@ class WhatsAppClient {
         console.log(`\n📩 Incoming Message from +${senderPhone} (${pushName}): "${text}"`);
 
         // Record incoming message IMMEDIATELY so it is always present in Messages tab & Live feed
-        await recordLead(senderPhone, text, null, pushName);
+        await recordLead(senderPhone, text, null, pushName, remoteJid);
         this.notifySubscribers('leads_updated', {});
 
         const logEntry = {
@@ -319,10 +553,8 @@ class WhatsAppClient {
         // Check if Owner is currently chatting in this conversation
         const settings = getAgentSettings();
         const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 30;
-        this.humanTakeovers = this.humanTakeovers || new Map();
-        const lastHumanMessage = this.humanTakeovers.get(remoteJid) || 0;
 
-        if (takeoverMinutes > 0 && Date.now() - lastHumanMessage < takeoverMinutes * 60 * 1000) {
+        if (this.isChatPaused(remoteJid)) {
           console.log(`👤 Siz şəxsən söhbətdə olduğunuz üçün bot +${senderPhone} nömrəsinə mane olmur (${takeoverMinutes} dəqiqəlik sükut aktivdir).`);
           continue;
         }
@@ -359,8 +591,7 @@ class WhatsAppClient {
           const aiResponse = await generateAIResponse(remoteJid, text);
 
           // CRITICAL SAFETY CHECK: Did the owner speak while AI was generating?
-          const currentHumanTime = this.humanTakeovers.get(remoteJid) || 0;
-          if (takeoverMinutes > 0 && (currentHumanTime >= processStartTime || Date.now() - currentHumanTime < takeoverMinutes * 60 * 1000)) {
+          if (this.isChatPaused(remoteJid)) {
             console.log(`🛑 Siz bu arada mesaj yazdığınız üçün hazırlanmış AI cavabı ləğv edildi və alıcıya göndərilmədi!`);
             continue;
           }
@@ -378,7 +609,7 @@ class WhatsAppClient {
           }
 
           // Record Lead and Appointment
-          await recordLead(senderPhone, text, aiResponse, pushName);
+          await recordLead(senderPhone, text, aiResponse, pushName, remoteJid);
 
           const outgoingLog = {
             id: (sent?.key?.id) || ('reply_' + Date.now()),
