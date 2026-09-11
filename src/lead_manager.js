@@ -73,34 +73,52 @@ async function sendTelegramAlert(lead, viewingRequest) {
   });
 }
 
-async function recordLead(phoneNumber, rawMessage, aiAnalysis) {
+async function recordLead(phoneNumber, rawMessage, aiAnalysis = null, contactName = null) {
   const leads = getLeads();
   let lead = leads.find(l => l.phoneNumber === phoneNumber);
 
-  const isViewing = aiAnalysis && aiAnalysis.is_viewing_request;
-  const callerName = aiAnalysis && aiAnalysis.detected_name ? aiAnalysis.detected_name : (lead ? lead.name : null);
+  const isViewing = Boolean(aiAnalysis && aiAnalysis.is_viewing_request);
+  const callerName = (aiAnalysis && aiAnalysis.detected_name) || contactName || (lead ? lead.name : null);
   const appointmentTime = aiAnalysis && aiAnalysis.appointment_time ? aiAnalysis.appointment_time : null;
+
+  const now = new Date().toISOString();
+  const msgEntry = {
+    text: rawMessage,
+    from: rawMessage.startsWith('Siz: ') ? 'me' : 'contact',
+    timestamp: now
+  };
 
   if (!lead) {
     lead = {
       id: 'lead_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       phoneNumber: phoneNumber,
-      name: callerName || 'Naməlum Alıcı',
+      name: callerName || 'WhatsApp İstifadəçisi',
       status: isViewing ? 'viewing_requested' : 'inquired',
       interestLevel: isViewing ? 'high' : 'medium',
-      firstContact: new Date().toISOString(),
-      lastContact: new Date().toISOString(),
+      firstContact: now,
+      lastContact: now,
       lastMessage: rawMessage,
+      messages: [msgEntry],
       viewingAppointments: [],
       historyCount: 1,
       notes: aiAnalysis && aiAnalysis.summary ? aiAnalysis.summary : ''
     };
     leads.unshift(lead);
   } else {
-    lead.lastContact = new Date().toISOString();
+    lead.lastContact = now;
     lead.lastMessage = rawMessage;
     lead.historyCount = (lead.historyCount || 1) + 1;
-    if (callerName) lead.name = callerName;
+    lead.messages = lead.messages || [];
+    // Avoid exact duplicate adjacent messages
+    const lastExisting = lead.messages[lead.messages.length - 1];
+    if (!lastExisting || lastExisting.text !== rawMessage || Date.now() - new Date(lastExisting.timestamp).getTime() > 1000) {
+      lead.messages.push(msgEntry);
+      if (lead.messages.length > 50) lead.messages.shift();
+    }
+
+    if (callerName && (lead.name === 'Naməlum Alıcı' || lead.name === 'WhatsApp İstifadəçisi' || !lead.name)) {
+      lead.name = callerName;
+    }
     if (isViewing) {
       lead.status = 'viewing_requested';
       lead.interestLevel = 'high';
@@ -111,9 +129,10 @@ async function recordLead(phoneNumber, rawMessage, aiAnalysis) {
   }
 
   if (isViewing && appointmentTime) {
+    lead.viewingAppointments = lead.viewingAppointments || [];
     lead.viewingAppointments.push({
       id: 'apt_' + Date.now(),
-      requestedAt: new Date().toISOString(),
+      requestedAt: now,
       preferred_time: appointmentTime,
       status: 'pending_confirmation'
     });

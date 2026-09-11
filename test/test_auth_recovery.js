@@ -107,7 +107,7 @@ async function runTests() {
       headers: { 'X-API-Key': adminPassword }
     });
     assert.strictEqual(res4.status, 200, 'Expected 200 OK for status with admin password');
-    assert.strictEqual(res4.data.version, 'v3.4.6');
+    assert.strictEqual(res4.data.version, 'v3.4.7');
     console.log(`   ✅ Passed: Status returned successfully (Version: ${res4.data.version})`);
 
     // -------------------------------------------------------------
@@ -141,6 +141,22 @@ async function runTests() {
     assert.strictEqual(res5b.status, 200);
     assert.strictEqual(res5b.data.geminiApiKey, newTestKey);
     console.log('   ✅ Passed: Successfully updated Gemini API key in personal cabinet!');
+
+    // -------------------------------------------------------------
+    // Test 5c: Verify GET /api/leads returns actual leads from disk
+    // -------------------------------------------------------------
+    console.log('5️⃣c Testing /api/leads returns actual leads from disk...');
+    const res5c = await makeRequest({
+      hostname: 'localhost',
+      port: 3099,
+      path: '/api/leads',
+      method: 'GET',
+      headers: { 'X-API-Key': adminPassword }
+    });
+    assert.strictEqual(res5c.status, 200, 'Expected 200 OK for /api/leads');
+    assert.ok(Array.isArray(res5c.data), 'Expected array of leads');
+    assert.ok(res5c.data.length > 0, 'Expected non-empty array of leads from leads.json');
+    console.log(`   ✅ Passed: /api/leads returned ${res5c.data.length} lead(s) successfully!`);
 
     // -------------------------------------------------------------
     // Test 6: Brute force protection on login attempts

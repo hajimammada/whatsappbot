@@ -184,9 +184,45 @@ class WhatsAppClient {
       }
     });
 
-    this.socket.ev.on('messages.upsert', async (m) => {
-      if (m.type !== 'notify') return;
+    this.socket.ev.on('messaging-history.set', async ({ chats, contacts, messages }) => {
+      try {
+        if (messages && messages.length > 0) {
+          console.log(`📥 WhatsApp chat tarixçəsi sinxronlaşdırılır (${messages.length} mesaj)...`);
+          for (const msg of messages) {
+            const remoteJid = msg.key?.remoteJid;
+            if (!remoteJid || remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') continue;
+            const senderPhone = remoteJid.replace(/@.+/, '');
+            const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || '';
+            if (!text || text.trim() === '') continue;
 
+            const fromMe = Boolean(msg.key?.fromMe);
+            const pushName = msg.pushName || (fromMe ? 'Siz' : 'WhatsApp İstifadəçisi');
+            await recordLead(senderPhone, fromMe ? `Siz: ${text}` : text, null, fromMe ? null : pushName);
+
+            const msgTimestamp = msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000).toISOString() : new Date().toISOString();
+            const logEntry = {
+              id: msg.key?.id || ('hist_' + Date.now()),
+              from: fromMe ? 'me' : senderPhone,
+              to: fromMe ? senderPhone : undefined,
+              name: pushName,
+              text: text,
+              direction: fromMe ? 'outgoing' : 'incoming',
+              timestamp: msgTimestamp
+            };
+            this.recentMessages.push(logEntry);
+          }
+          if (this.recentMessages.length > 100) {
+            this.recentMessages = this.recentMessages.slice(-100);
+          }
+          this.notifySubscribers('leads_updated', {});
+          this.notifySubscribers('status_change', this.getStatus());
+        }
+      } catch (err) {
+        console.warn('Error processing messaging-history.set:', err);
+      }
+    });
+
+    this.socket.ev.on('messages.upsert', async (m) => {
       for (const msg of m.messages) {
         const remoteJid = msg.key.remoteJid;
         if (!remoteJid) continue;
@@ -212,7 +248,9 @@ class WhatsAppClient {
         // Ignore empty messages, receipts, app state syncs, media without caption
         if (!text || text.trim() === '') continue;
 
-        // 1. HUMAN TAKEOVER:
+        const msgTimestamp = msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000).toISOString() : new Date().toISOString();
+
+        // 1. HUMAN TAKEOVER / OWNER MANUAL MESSAGE:
         // If YOU manually type and send a message in this chat, bot pauses only for this contact
         if (msg.key.fromMe) {
           const settings = getAgentSettings();
@@ -227,12 +265,56 @@ class WhatsAppClient {
               remainingMinutes: takeoverMinutes
             });
           }
+
+          // Record owner's outgoing message in recentMessages and leads table
+          const outgoingLog = {
+            id: msg.key.id || ('me_' + Date.now()),
+            from: 'me',
+            to: senderPhone,
+            name: 'Siz',
+            text: text,
+            direction: 'outgoing',
+            timestamp: msgTimestamp
+          };
+          this.recentMessages.push(outgoingLog);
+          if (this.recentMessages.length > 100) this.recentMessages.shift();
+          this.notifySubscribers('new_message', outgoingLog);
+
+          await recordLead(senderPhone, `Siz: ${text}`, null, null);
+          this.notifySubscribers('leads_updated', {});
           continue;
         }
 
         const pushName = msg.pushName || 'WhatsApp İstifadəçisi';
 
         console.log(`\n📩 Incoming Message from +${senderPhone} (${pushName}): "${text}"`);
+
+        // Record incoming message IMMEDIATELY so it is always present in Messages tab & Live feed
+        await recordLead(senderPhone, text, null, pushName);
+        this.notifySubscribers('leads_updated', {});
+
+        const logEntry = {
+          id: msg.key.id,
+          from: senderPhone,
+          name: pushName,
+          text: text,
+          direction: 'incoming',
+          timestamp: msgTimestamp
+        };
+        this.recentMessages.push(logEntry);
+        if (this.recentMessages.length > 100) this.recentMessages.shift();
+        this.notifySubscribers('new_message', logEntry);
+
+        // If this was an offline sync or history append, do NOT auto-reply
+        if (m.type !== 'notify') {
+          continue;
+        }
+
+        // Check message age: if older than 2 minutes, skip auto-reply
+        if (msg.messageTimestamp && (Date.now() / 1000 - msg.messageTimestamp > 120)) {
+          console.log(`⌛ Köhnə mesaj (+${senderPhone}), avto-cavab verilmədi.`);
+          continue;
+        }
 
         // Check if Owner is currently chatting in this conversation
         const settings = getAgentSettings();
@@ -242,17 +324,6 @@ class WhatsAppClient {
 
         if (takeoverMinutes > 0 && Date.now() - lastHumanMessage < takeoverMinutes * 60 * 1000) {
           console.log(`👤 Siz şəxsən söhbətdə olduğunuz üçün bot +${senderPhone} nömrəsinə mane olmur (${takeoverMinutes} dəqiqəlik sükut aktivdir).`);
-          const logEntry = {
-            id: msg.key.id,
-            from: senderPhone,
-            name: pushName,
-            text: text,
-            direction: 'incoming',
-            timestamp: new Date().toISOString(),
-            status: 'human_takeover_skipped'
-          };
-          this.recentMessages.push(logEntry);
-          this.notifySubscribers('new_message', logEntry);
           continue;
         }
 
@@ -264,18 +335,6 @@ class WhatsAppClient {
           continue;
         }
         this.cooldowns.set(remoteJid, now);
-
-        // Record incoming message in recent logs
-        const logEntry = {
-          id: msg.key.id,
-          from: senderPhone,
-          name: pushName,
-          text: text,
-          direction: 'incoming',
-          timestamp: new Date().toISOString()
-        };
-        this.recentMessages.push(logEntry);
-        this.notifySubscribers('new_message', logEntry);
 
         // If auto-reply is disabled globally, just log
         if (!this.autoReplyEnabled) {
@@ -319,7 +378,7 @@ class WhatsAppClient {
           }
 
           // Record Lead and Appointment
-          await recordLead(senderPhone, text, aiResponse);
+          await recordLead(senderPhone, text, aiResponse, pushName);
 
           const outgoingLog = {
             id: (sent?.key?.id) || ('reply_' + Date.now()),
@@ -330,6 +389,7 @@ class WhatsAppClient {
             isViewingRequest: aiResponse.is_viewing_request
           };
           this.recentMessages.push(outgoingLog);
+          if (this.recentMessages.length > 100) this.recentMessages.shift();
           this.notifySubscribers('new_message', outgoingLog);
           this.notifySubscribers('leads_updated', {});
         } catch (err) {

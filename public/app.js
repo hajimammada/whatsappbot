@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tbl_action: "Əlaqə",
       no_leads: "Hələ qeydə alınmış alıcı yoxdur.",
       btn_resume: "▶️ Aktivləşdir",
-      btn_pause: "⏸️ Dayandır (5s)",
+      btn_pause: "⏸️ Dayandır (30d)",
       bot_active: "🟢 Aktivdir",
       bot_paused: "⏸️ Dayandırılıb",
       docs_header: "Sənədlər",
@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tbl_action: "Действие",
       no_leads: "Пока нет зафиксированных клиентов.",
       btn_resume: "▶️ Включить",
-      btn_pause: "⏸️ Пауза (5ч)",
+      btn_pause: "⏸️ Пауза (30м)",
       bot_active: "🟢 Активен",
       bot_paused: "⏸️ Приостановлен",
       docs_header: "Документы",
@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tbl_action: "Action",
       no_leads: "No customer leads recorded yet.",
       btn_resume: "▶️ Resume Bot",
-      btn_pause: "⏸️ Pause (5h)",
+      btn_pause: "⏸️ Pause (30m)",
       bot_active: "🟢 Active",
       bot_paused: "⏸️ Paused",
       docs_header: "Documents",
@@ -241,6 +241,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const targetId = btn.getAttribute('data-tab');
       const targetContent = document.getElementById(targetId);
       if (targetContent) targetContent.classList.add('active');
+
+      if (targetId === 'tab-leads' && currentAuthToken) {
+        loadLeads();
+      }
     });
   });
 
@@ -656,6 +660,16 @@ document.addEventListener('DOMContentLoaded', () => {
       connectedInfo.classList.add('hidden');
       qrImageWrapper.innerHTML = `<p style="color: var(--danger-color); padding: 20px;">${dict.status_disconnected}.</p>`;
     }
+
+    // Populate live messages feed from recent messages if currently empty
+    if (data.recentMessages && data.recentMessages.length > 0 && messagesFeed) {
+      const placeholder = messagesFeed.querySelector('.empty-feed-placeholder');
+      if (placeholder) {
+        messagesFeed.innerHTML = '';
+        totalMessagesCount = 0;
+        data.recentMessages.forEach(msg => appendMessageToFeed(msg));
+      }
+    }
   }
 
   function renderQR(dataUrl) {
@@ -666,16 +680,23 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function appendMessageToFeed(msg) {
+    if (!messagesFeed) return;
+    const placeholder = messagesFeed.querySelector('.empty-feed-placeholder');
+    if (placeholder) {
+      messagesFeed.innerHTML = '';
+    }
+
     totalMessagesCount++;
     statTotalMessages.textContent = totalMessagesCount;
 
     const div = document.createElement('div');
     div.className = `feed-item ${msg.direction}`;
-    const timeStr = new Date(msg.timestamp).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' });
+    const timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' }) : '';
+    const senderTitle = msg.direction === 'incoming' ? (msg.name || msg.from) : (msg.name || 'Siz (Bot)');
 
     div.innerHTML = `
       <div class="feed-meta">
-        <strong>${escapeHtml(msg.direction === 'incoming' ? (msg.name || msg.from) : 'AI Bot')}</strong>
+        <strong>${escapeHtml(senderTitle)}</strong>
         <span>${timeStr}</span>
       </div>
       <div class="feed-text">${escapeHtml(msg.text)}</div>
@@ -892,11 +913,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const isHigh = l.interestLevel === 'high';
       const isViewing = l.status === 'viewing_requested';
       const aptTime = (l.viewingAppointments && l.viewingAppointments[0]?.preferred_time) || '-';
-      const dateFormatted = new Date(l.lastContact).toLocaleString(currentLang === 'en' ? 'en-US' : (currentLang === 'ru' ? 'ru-RU' : 'az-AZ'), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const contactDate = l.lastContact || l.firstContact || new Date().toISOString();
+      const dateFormatted = new Date(contactDate).toLocaleString(currentLang === 'en' ? 'en-US' : (currentLang === 'ru' ? 'ru-RU' : 'az-AZ'), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
       const chatStatus = chatStatuses[l.phoneNumber];
       const isPaused = chatStatus && chatStatus.isPaused;
-      const remainingMins = chatStatus?.remainingMinutes || 300;
+      const remainingMins = chatStatus?.remainingMinutes || 30;
       const remainingFormatted = formatRemainingTime(remainingMins);
 
       const botControlHtml = isPaused
@@ -909,15 +931,19 @@ document.addEventListener('DOMContentLoaded', () => {
              <button class="btn btn-secondary btn-xs btn-pause-bot" data-phone="${l.phoneNumber}">${dict.btn_pause}</button>
            </div>`;
 
+      const msgCountBadge = (l.messages && l.messages.length > 1) 
+        ? `<span style="display: inline-block; font-size: 10px; background: rgba(59,130,246,0.2); color: var(--accent-blue); padding: 1px 5px; border-radius: 4px; margin-left: 4px;">${l.messages.length}</span>` 
+        : '';
+
       return `
         <tr>
           <td>
-            <strong>${escapeHtml(l.name || 'User')}</strong><br>
+            <strong>${escapeHtml(l.name || 'User')}</strong>${msgCountBadge}<br>
             <span style="font-family: var(--font-mono); color: var(--accent-blue);">+${l.phoneNumber}</span>
           </td>
           <td>
             <span class="badge-lead ${isViewing ? 'badge-status-viewing' : ''}">
-              ${isViewing ? '🏡 Viewing' : '💬 Lead'}
+              ${isViewing ? '🏡 Viewing' : '💬 Chat'}
             </span>
           </td>
           <td>
@@ -927,7 +953,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
           <td><strong>${escapeHtml(aptTime)}</strong></td>
           <td>${botControlHtml}</td>
-          <td style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <td style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(l.lastMessage || '')}">
             "${escapeHtml(l.lastMessage || '')}"
           </td>
           <td style="font-size: 11px; color: var(--text-muted);">${dateFormatted}</td>
@@ -959,7 +985,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           await authFetch(`/api/chat/${phone}/pause`, {
             method: 'POST',
-            body: JSON.stringify({ minutes: 300 })
+            body: JSON.stringify({ minutes: 30 })
           });
           await loadLeads();
         } catch (e) {

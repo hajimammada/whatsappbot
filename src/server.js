@@ -6,6 +6,7 @@ const { execSync } = require('child_process');
 
 const waClient = require('./whatsapp_client');
 const userManager = require('./user_manager');
+const { getLeads, updateLeadStatus } = require('./lead_manager');
 const { generateAIResponse, getAgentSettings, validateGeminiApiKey } = require('./ai_engine');
 
 function getAppVersion() {
@@ -38,7 +39,7 @@ function getAppVersion() {
     // Git command not available
   }
 
-  return 'v3.4.6';
+  return 'v3.4.7';
 }
 
 function createServer() {
@@ -365,14 +366,41 @@ function createServer() {
     }
   });
 
-  // Leads API (Profile-specific)
+  // Leads & Messages API (Live WhatsApp messages + user leads)
   app.get('/api/leads', requireAuth, (req, res) => {
-    res.json(req.user.leads || []);
+    try {
+      const diskLeads = getLeads() || [];
+      const userLeads = (req.user && req.user.leads) || [];
+      const leadsMap = new Map();
+
+      for (const l of diskLeads) {
+        if (l.phoneNumber) leadsMap.set(l.phoneNumber, l);
+      }
+      for (const l of userLeads) {
+        if (l.phoneNumber && !leadsMap.has(l.phoneNumber)) {
+          leadsMap.set(l.phoneNumber, l);
+        }
+      }
+
+      // Sort by lastContact descending
+      const sorted = Array.from(leadsMap.values()).sort((a, b) => {
+        const timeA = new Date(a.lastContact || a.firstContact || 0).getTime();
+        const timeB = new Date(b.lastContact || b.firstContact || 0).getTime();
+        return timeB - timeA;
+      });
+
+      res.json(sorted);
+    } catch (err) {
+      console.error('Error fetching leads:', err);
+      res.status(500).json({ error: 'Could not fetch leads' });
+    }
   });
 
   app.post('/api/leads/:id/status', requireAuth, (req, res) => {
     const { status, notes } = req.body;
-    const updated = userManager.updateUserLeadStatus(req.user.apiKey, req.params.id, status, notes);
+    const updatedDisk = updateLeadStatus(req.params.id, status, notes);
+    const updatedUser = userManager.updateUserLeadStatus(req.user.apiKey, req.params.id, status, notes);
+    const updated = updatedDisk || updatedUser;
     if (updated) {
       broadcastSSE('leads_updated', {});
       res.json({ success: true, lead: updated });
