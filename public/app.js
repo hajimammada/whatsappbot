@@ -8,9 +8,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const I18N = {
     az: {
       brand_title: "whatsappbot.hajimammad.com",
-      tab_connect: "Connect",
-      tab_messages: "Messages",
-      tab_data: "Data",
+      tab_connect: "Qoşulma",
+      tab_messages: "Mesajlar",
+      tab_data: "Məlumatlar",
       tab_test: "Test",
       status_connecting: "Qoşulur...",
       status_connected: "Qoşuldu ✅",
@@ -66,10 +66,10 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     ru: {
       brand_title: "whatsappbot.hajimammad.com",
-      tab_connect: "Connect",
-      tab_messages: "Messages",
-      tab_data: "Data",
-      tab_test: "Test",
+      tab_connect: "Подключение",
+      tab_messages: "Сообщения",
+      tab_data: "Данные",
+      tab_test: "Тест",
       status_connecting: "Подключение...",
       status_connected: "Подключено ✅",
       status_waiting_qr: "Сканируйте QR",
@@ -286,7 +286,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const authForm = document.getElementById('auth-form');
   const inputApiKey = document.getElementById('input-api-key');
   const authErrorMsg = document.getElementById('auth-error-msg');
-  const activeApiKeyDisplay = document.getElementById('active-api-key-display');
   const btnSwitchKey = document.getElementById('btn-switch-key');
 
   // Cabinet API Key Elements (in Connect Tab above QR)
@@ -328,16 +327,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateSessionDisplay(key) {
-    if (activeApiKeyDisplay) {
-      if (key && key !== 'Protected') {
-        const masked = key.length > 8 ? key.substring(0, 4) + '...' + key.substring(key.length - 3) : key;
-        activeApiKeyDisplay.textContent = masked;
-        activeApiKeyDisplay.title = 'Google Gemini Key: ' + key;
-      } else {
-        activeApiKeyDisplay.textContent = '🔒 Admin';
-        activeApiKeyDisplay.title = 'Admin Session Active';
-      }
-    }
     if (cabinetApiKeyInput && key && key !== 'Protected') {
       cabinetApiKeyInput.value = key;
     }
@@ -430,10 +419,6 @@ document.addEventListener('DOMContentLoaded', () => {
       sseInstance = null;
     }
     if (inputApiKey) inputApiKey.value = '';
-    if (activeApiKeyDisplay) {
-      activeApiKeyDisplay.textContent = '---';
-      activeApiKeyDisplay.title = '';
-    }
     if (cabinetApiKeyInput) cabinetApiKeyInput.value = '';
     if (cabinetKeyStatusMsg) {
       cabinetKeyStatusMsg.textContent = '';
