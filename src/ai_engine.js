@@ -231,6 +231,37 @@ function fallbackRuleEngine(incomingMessage, activeDoc) {
   };
 }
 
+async function discoverAvailableGeminiModels(cleanKey) {
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.models)) {
+        const supported = data.models
+          .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+          .map(m => m.name.replace(/^models\//, ''));
+
+        if (supported.length > 0) {
+          supported.sort((a, b) => {
+            const score = (m) => {
+              if (m.includes('3.1-pro')) return 10;
+              if (m.includes('3.1-flash')) return 9;
+              if (m.includes('3.1')) return 8;
+              if (m.includes('2.5-flash')) return 7;
+              if (m.includes('2.5-pro')) return 6;
+              if (m.includes('2.5')) return 5;
+              return 1;
+            };
+            return score(b) - score(a);
+          });
+          return supported;
+        }
+      }
+    }
+  } catch (err) {}
+  return null;
+}
+
 async function validateGeminiApiKey(apiKey) {
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length < 15) {
     return { valid: false, error: 'Daxil edilən API Key formatı yanlışdır. Zəhmət olmasa real Google Gemini API açarı daxil edin.' };
@@ -241,7 +272,11 @@ async function validateGeminiApiKey(apiKey) {
     return { valid: true };
   }
 
-  const validationModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'];
+  const discovered = await discoverAvailableGeminiModels(cleanKey);
+  const validationModels = (discovered && discovered.length > 0)
+    ? discovered
+    : ['gemini-3.1-pro-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+
   let lastErr = null;
 
   for (const modelName of validationModels) {
@@ -249,7 +284,7 @@ async function validateGeminiApiKey(apiKey) {
       const genAI = new GoogleGenerativeAI(cleanKey);
       const model = genAI.getGenerativeModel({ model: modelName });
       await model.generateContent("ping");
-      return { valid: true };
+      return { valid: true, activeModel: modelName };
     } catch (err) {
       lastErr = err;
       const msg = err.message || '';
@@ -280,12 +315,16 @@ async function generateAIResponse(contactId, incomingMessage, customActiveDoc = 
   const systemPrompt = buildSystemPrompt(activeDoc);
 
   if (geminiKey && geminiKey !== 'your_gemini_api_key_here') {
+    const discovered = await discoverAvailableGeminiModels(geminiKey);
     const configuredModel = agentSettings.models?.gemini?.model_name;
+    const baseList = (discovered && discovered.length > 0) ? discovered : [
+      'gemini-3.1-pro-preview',
+      'gemini-3.1-flash-lite',
+      'gemini-2.5-flash'
+    ];
     const candidateModels = [
-      configuredModel && !configuredModel.includes('1.5') && !configuredModel.includes('3.6') && !configuredModel.includes('2.0') ? configuredModel : 'gemini-2.5-flash',
-      'gemini-2.5-flash',
-      'gemini-2.5-flash-lite',
-      'gemini-2.5-pro'
+      configuredModel && !configuredModel.includes('1.5') && !configuredModel.includes('3.6') && !configuredModel.includes('2.0') ? configuredModel : baseList[0],
+      ...baseList
     ];
     const uniqueModels = [...new Set(candidateModels)];
 
