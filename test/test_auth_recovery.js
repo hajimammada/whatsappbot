@@ -31,7 +31,15 @@ function makeRequest(options, postData = null) {
   });
 }
 
+const fs = require('fs');
+const path = require('path');
+const usersDbPath = path.join(__dirname, '..', 'data', 'users_db.json');
+let originalDb = null;
+
 async function runTests() {
+  if (fs.existsSync(usersDbPath)) {
+    originalDb = fs.readFileSync(usersDbPath, 'utf-8');
+  }
   console.log('🧪 Starting Dual-Password Authentication & Whitelist Tests...\n');
 
   const app = createServer();
@@ -132,9 +140,57 @@ async function runTests() {
     assert.strictEqual(res6.status, 200, 'Expected 200 OK for status with recovery password');
     console.log('   ✅ Passed: Status accessible using second recovery password.');
 
-    console.log('\n🎉 ALL DUAL-PASSWORD AUTHENTICATION TESTS PASSED PERFECTLY!');
+    // -------------------------------------------------------------
+    // Test 7: In-cabinet API key update via POST /api/auth/update-key MUST succeed (200)
+    // -------------------------------------------------------------
+    console.log('7️⃣ Testing in-cabinet API key update (/api/auth/update-key)...');
+    const newTestKey = 'mock_new_gemini_key_67890';
+    const res7 = await makeRequest({
+      hostname: 'localhost',
+      port: 3099,
+      path: '/api/auth/update-key',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': authorizedKey
+      }
+    }, { newApiKey: newTestKey });
+
+    assert.strictEqual(res7.status, 200, 'Expected 200 OK for key update');
+    assert.strictEqual(res7.data.success, true);
+    assert.strictEqual(res7.data.user.apiKey, newTestKey);
+
+    // Verify new key works for status
+    const res7b = await makeRequest({
+      hostname: 'localhost',
+      port: 3099,
+      path: '/api/status',
+      method: 'GET',
+      headers: { 'X-API-Key': newTestKey }
+    });
+    assert.strictEqual(res7b.status, 200, 'Expected 200 OK with new key');
+    console.log('   ✅ Passed: Successfully updated API key in personal cabinet and validated new key!');
+
+    // Revert back to original authorizedKey
+    await makeRequest({
+      hostname: 'localhost',
+      port: 3099,
+      path: '/api/auth/update-key',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': newTestKey
+      }
+    }, { newApiKey: authorizedKey });
+
+    console.log('\n🎉 ALL DUAL-PASSWORD & IN-CABINET KEY UPDATE TESTS PASSED PERFECTLY!');
   } finally {
     server.close();
+    if (originalDb !== null) {
+      try {
+        fs.writeFileSync(usersDbPath, originalDb, 'utf-8');
+      } catch (e) {}
+    }
   }
 }
 

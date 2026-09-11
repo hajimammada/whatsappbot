@@ -15,6 +15,16 @@ function getAppVersion() {
   }
 
   try {
+    const pkgPath = path.join(__dirname, '..', 'package.json');
+    const raw = fs.readFileSync(pkgPath, 'utf-8');
+    const pkg = JSON.parse(raw);
+    if (pkg.version) {
+      const v = pkg.version.trim();
+      return v.startsWith('v') ? v : `v${v}`;
+    }
+  } catch (err) {}
+
+  try {
     const gitTag = execSync('git describe --tags --always', {
       cwd: path.join(__dirname, '..'),
       timeout: 2000,
@@ -28,17 +38,7 @@ function getAppVersion() {
     // Git command not available
   }
 
-  try {
-    const pkgPath = path.join(__dirname, '..', 'package.json');
-    const raw = fs.readFileSync(pkgPath, 'utf-8');
-    const pkg = JSON.parse(raw);
-    if (pkg.version) {
-      const v = pkg.version.trim();
-      return v.startsWith('v') ? v : `v${v}`;
-    }
-  } catch (err) {}
-
-  return 'v3.2.9';
+  return 'v3.3.0';
 }
 
 function createServer() {

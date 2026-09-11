@@ -55,7 +55,14 @@ document.addEventListener('DOMContentLoaded', () => {
       modal_title: "Google Gemini API Key və ya Parol ilə Giriş",
       modal_desc: "Daxil olmaq üçün Google Gemini API açarınızı və ya bərpa parolunuzu daxil edin.",
       modal_key_label: "API Key və ya Parol:",
-      modal_submit: "Daxil Ol 🚀"
+      modal_submit: "Daxil Ol 🚀",
+      lbl_cabinet_api_key: "Google Gemini API Açarınız:",
+      btn_update_api_key: "💾 Yenilə",
+      msg_key_updated: "✅ API açarınız uğurla yeniləndi və saxlanıldı!",
+      msg_key_updating: "⏳ Açar yoxlanılır və yenilənir...",
+      msg_key_required: "⚠️ Zəhmət olmasa yeni API açarı daxil edin.",
+      show_key: "👁️ Göstər",
+      hide_key: "🙈 Gizlət"
     },
     ru: {
       brand_title: "whatsappbot.hajimammad.com",
@@ -106,7 +113,14 @@ document.addEventListener('DOMContentLoaded', () => {
       modal_title: "Вход по Google Gemini API Key или паролю",
       modal_desc: "Введите ваш Google Gemini API ключ или пароль восстановления для входа.",
       modal_key_label: "API Key или Пароль:",
-      modal_submit: "Войти 🚀"
+      modal_submit: "Войти 🚀",
+      lbl_cabinet_api_key: "Ваш Google Gemini API Ключ:",
+      btn_update_api_key: "💾 Обновить",
+      msg_key_updated: "✅ Ваш API ключ успешно обновлен и сохранен!",
+      msg_key_updating: "⏳ Проверка и обновление ключа...",
+      msg_key_required: "⚠️ Пожалуйста, введите новый API ключ.",
+      show_key: "👁️ Показать",
+      hide_key: "🙈 Скрыть"
     },
     en: {
       brand_title: "whatsappbot.hajimammad.com",
@@ -157,7 +171,14 @@ document.addEventListener('DOMContentLoaded', () => {
       modal_title: "Sign In with Google Gemini API Key or Password",
       modal_desc: "Enter your Google Gemini API key or recovery password to log in.",
       modal_key_label: "API Key or Password:",
-      modal_submit: "Enter 🚀"
+      modal_submit: "Enter 🚀",
+      lbl_cabinet_api_key: "Your Google Gemini API Key:",
+      btn_update_api_key: "💾 Update",
+      msg_key_updated: "✅ API Key successfully updated and saved!",
+      msg_key_updating: "⏳ Validating and updating key...",
+      msg_key_required: "⚠️ Please enter a new API key.",
+      show_key: "👁️ Show",
+      hide_key: "🙈 Hide"
     }
   };
 
@@ -186,6 +207,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (autoReplyToggle) {
       updateAutoReplyLabel(autoReplyToggle.checked);
+    }
+    if (typeof updateToggleKeyLabels === 'function') {
+      updateToggleKeyLabels();
     }
   }
 
@@ -265,6 +289,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const activeApiKeyDisplay = document.getElementById('active-api-key-display');
   const btnSwitchKey = document.getElementById('btn-switch-key');
 
+  // Cabinet API Key Elements (in Connect Tab above QR)
+  const cabinetApiKeyInput = document.getElementById('cabinet-api-key-input');
+  const btnUpdateCabinetApiKey = document.getElementById('btn-update-cabinet-api-key');
+  const btnToggleCabinetKeyVis = document.getElementById('btn-toggle-cabinet-key-vis');
+  const cabinetKeyStatusMsg = document.getElementById('cabinet-key-status-msg');
+
   let currentApiKey = localStorage.getItem('wa_api_key') || null;
   let documents = [];
   let activeDocumentId = null;
@@ -302,6 +332,9 @@ document.addEventListener('DOMContentLoaded', () => {
       activeApiKeyDisplay.textContent = masked;
       activeApiKeyDisplay.title = 'API Key: ' + key;
     }
+    if (cabinetApiKeyInput && key) {
+      cabinetApiKeyInput.value = key;
+    }
   }
 
   async function authFetch(url, options = {}) {
@@ -327,13 +360,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnToggleKey = document.getElementById('btn-toggle-key-visibility');
   if (btnToggleKey && inputApiKey) {
     btnToggleKey.addEventListener('click', () => {
-      if (inputApiKey.type === 'password') {
-        inputApiKey.type = 'text';
-        btnToggleKey.textContent = '🙈 Gizlət';
-      } else {
-        inputApiKey.type = 'password';
-        btnToggleKey.textContent = '👁️ Göstər';
-      }
+      inputApiKey.type = inputApiKey.type === 'password' ? 'text' : 'password';
+      updateToggleKeyLabels();
     });
   }
 
@@ -391,6 +419,11 @@ document.addEventListener('DOMContentLoaded', () => {
       activeApiKeyDisplay.textContent = '---';
       activeApiKeyDisplay.title = '';
     }
+    if (cabinetApiKeyInput) cabinetApiKeyInput.value = '';
+    if (cabinetKeyStatusMsg) {
+      cabinetKeyStatusMsg.textContent = '';
+      cabinetKeyStatusMsg.classList.add('hidden');
+    }
     documents = [];
     activeDocumentId = null;
     selectedDocumentId = null;
@@ -415,6 +448,104 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (btnSwitchKey) {
     btnSwitchKey.addEventListener('click', handleLogout);
+  }
+
+  // -----------------------------------------------------------------
+  // 3.1 Cabinet In-Page API Key Management (Above QR Code)
+  // -----------------------------------------------------------------
+  function showCabinetKeyStatus(msg, type = 'info') {
+    if (!cabinetKeyStatusMsg) return;
+    cabinetKeyStatusMsg.textContent = msg;
+    cabinetKeyStatusMsg.classList.remove('hidden');
+    if (type === 'error') {
+      cabinetKeyStatusMsg.style.color = '#f87171';
+    } else if (type === 'success') {
+      cabinetKeyStatusMsg.style.color = '#34d399';
+    } else {
+      cabinetKeyStatusMsg.style.color = '#93c5fd';
+    }
+  }
+
+  function updateToggleKeyLabels() {
+    const dict = I18N[currentLang] || I18N.az;
+    if (btnToggleKey && inputApiKey) {
+      btnToggleKey.textContent = inputApiKey.type === 'password' ? dict.show_key : dict.hide_key;
+    }
+    if (btnToggleCabinetKeyVis && cabinetApiKeyInput) {
+      btnToggleCabinetKeyVis.textContent = cabinetApiKeyInput.type === 'password' ? dict.show_key : dict.hide_key;
+    }
+  }
+
+  if (btnToggleCabinetKeyVis && cabinetApiKeyInput) {
+    btnToggleCabinetKeyVis.addEventListener('click', () => {
+      cabinetApiKeyInput.type = cabinetApiKeyInput.type === 'password' ? 'text' : 'password';
+      updateToggleKeyLabels();
+    });
+  }
+
+  async function handleCabinetKeyUpdate() {
+    if (!cabinetApiKeyInput) return;
+    const newKey = cabinetApiKeyInput.value.trim();
+    const dict = I18N[currentLang] || I18N.az;
+
+    if (!newKey) {
+      showCabinetKeyStatus(dict.msg_key_required || 'API açarı daxil edilməlidir.', 'error');
+      return;
+    }
+
+    if (newKey === currentApiKey) {
+      showCabinetKeyStatus(dict.msg_key_updated || 'API açarı artıq cari açardır.', 'success');
+      return;
+    }
+
+    if (btnUpdateCabinetApiKey) {
+      btnUpdateCabinetApiKey.disabled = true;
+      btnUpdateCabinetApiKey.textContent = '...';
+    }
+    showCabinetKeyStatus(dict.msg_key_updating || 'Yoxlanılır...', 'info');
+
+    try {
+      const res = await authFetch('/api/auth/update-key', {
+        method: 'POST',
+        body: JSON.stringify({ newApiKey: newKey })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Açar yenilənmədi');
+      }
+
+      // Update current API key state and localStorage
+      currentApiKey = (data.user && data.user.apiKey) ? data.user.apiKey : newKey;
+      localStorage.setItem('wa_api_key', currentApiKey);
+      updateSessionDisplay(currentApiKey);
+
+      showCabinetKeyStatus(data.message || dict.msg_key_updated || 'API açarınız uğurla yeniləndi!', 'success');
+
+      // Refresh connection status and documents under the re-keyed user
+      initSSE();
+      await fetchStatus();
+      await loadDocuments();
+      await loadLeads();
+    } catch (err) {
+      showCabinetKeyStatus(err.message, 'error');
+    } finally {
+      if (btnUpdateCabinetApiKey) {
+        btnUpdateCabinetApiKey.disabled = false;
+        btnUpdateCabinetApiKey.textContent = dict.btn_update_api_key || '💾 Yenilə';
+      }
+    }
+  }
+
+  if (btnUpdateCabinetApiKey) {
+    btnUpdateCabinetApiKey.addEventListener('click', handleCabinetKeyUpdate);
+  }
+  if (cabinetApiKeyInput) {
+    cabinetApiKeyInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleCabinetKeyUpdate();
+      }
+    });
   }
 
   // -----------------------------------------------------------------
