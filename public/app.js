@@ -58,6 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
       modal_submit: "Daxil Ol 🚀",
       lbl_cabinet_api_key: "Google Gemini API Açarınız:",
       btn_update_api_key: "💾 Yenilə",
+      link_ai_studio: "🔗 Google AI Studio (Açar əldə et) ↗",
       msg_key_updated: "✅ API açarınız uğurla yeniləndi və saxlanıldı!",
       msg_key_updating: "⏳ Açar yoxlanılır və yenilənir...",
       msg_key_required: "⚠️ Zəhmət olmasa yeni API açarı daxil edin.",
@@ -116,6 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
       modal_submit: "Войти 🚀",
       lbl_cabinet_api_key: "Ваш Google Gemini API Ключ:",
       btn_update_api_key: "💾 Обновить",
+      link_ai_studio: "🔗 Google AI Studio (Получить ключ) ↗",
       msg_key_updated: "✅ Ваш API ключ успешно обновлен и сохранен!",
       msg_key_updating: "⏳ Проверка и обновление ключа...",
       msg_key_required: "⚠️ Пожалуйста, введите новый API ключ.",
@@ -174,6 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
       modal_submit: "Sign In 🚀",
       lbl_cabinet_api_key: "Your Google Gemini API Key:",
       btn_update_api_key: "💾 Update",
+      link_ai_studio: "🔗 Google AI Studio (Get API Key) ↗",
       msg_key_updated: "✅ API Key successfully updated and saved!",
       msg_key_updating: "⏳ Validating and updating key...",
       msg_key_required: "⚠️ Please enter a new API key.",
@@ -988,8 +991,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateAutoReplyLabel(enabled) {
     const dict = I18N[currentLang];
-    autoReplyLabel.textContent = enabled ? dict.auto_reply_on : dict.auto_reply_off;
-    autoReplyLabel.style.color = enabled ? 'var(--primary-color)' : 'var(--text-muted)';
+    if (autoReplyLabel) {
+      autoReplyLabel.textContent = enabled ? dict.auto_reply_on : dict.auto_reply_off;
+      autoReplyLabel.style.color = enabled ? 'var(--primary-color)' : 'var(--text-muted)';
+    }
+    const tip = enabled ? dict.auto_reply_on : dict.auto_reply_off;
+    if (autoReplyToggle) {
+      autoReplyToggle.title = tip;
+    }
+    const wrapper = document.querySelector('.toggle-wrapper');
+    if (wrapper) {
+      wrapper.title = tip;
+    }
   }
 
   btnReconnect.addEventListener('click', async () => {

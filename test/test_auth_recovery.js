@@ -107,7 +107,7 @@ async function runTests() {
       headers: { 'X-API-Key': adminPassword }
     });
     assert.strictEqual(res4.status, 200, 'Expected 200 OK for status with admin password');
-    assert.strictEqual(res4.data.version, 'v3.4.1');
+    assert.strictEqual(res4.data.version, 'v3.4.2');
     console.log(`   ✅ Passed: Status returned successfully (Version: ${res4.data.version})`);
 
     // -------------------------------------------------------------
