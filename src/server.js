@@ -7,7 +7,6 @@ const { execSync } = require('child_process');
 const waClient = require('./whatsapp_client');
 const userManager = require('./user_manager');
 const { generateAIResponse, getAgentSettings, validateGeminiApiKey } = require('./ai_engine');
-const recoveryManager = require('./recovery_manager');
 
 function getAppVersion() {
   if (process.env.APP_VERSION) {
@@ -39,7 +38,7 @@ function getAppVersion() {
     }
   } catch (err) {}
 
-  return 'v3.2.8';
+  return 'v3.2.9';
 }
 
 function createServer() {
@@ -129,38 +128,12 @@ function createServer() {
     }
   });
 
-  // Recovery API: Request One-Time Email Recovery
-  app.post('/api/auth/recover-request', async (req, res) => {
+  // Update Google Gemini API Key (Authenticated)
+  app.post('/api/auth/update-key', requireAuth, async (req, res) => {
     try {
-      const hostUrl = `${req.protocol}://${req.get('host')}`;
-      const result = await recoveryManager.sendRecoveryEmail(hostUrl);
-      res.json(result);
-    } catch (err) {
-      console.error('Recovery request error:', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Recovery API: Verify One-Time Token
-  app.get('/api/auth/verify-token', (req, res) => {
-    const token = req.query.token;
-    const verification = recoveryManager.verifyRecoveryToken(token);
-    if (!verification.valid) {
-      return res.status(400).json({ valid: false, error: verification.error });
-    }
-    res.json({ valid: true, expiresAt: verification.tokenData.expiresAt });
-  });
-
-  // Recovery API: Confirm New Key & Restore Old Account
-  app.post('/api/auth/recover-confirm', async (req, res) => {
-    try {
-      const { token, newApiKey } = req.body;
-      if (!token) return res.status(400).json({ error: 'Bərpa tokeni tapılmadı' });
-      if (!newApiKey || !newApiKey.trim()) return res.status(400).json({ error: 'Yeni Google Gemini API Key daxil edilməlidir' });
-
-      const verification = recoveryManager.verifyRecoveryToken(token);
-      if (!verification.valid) {
-        return res.status(400).json({ error: verification.error });
+      const { newApiKey } = req.body;
+      if (!newApiKey || !newApiKey.trim()) {
+        return res.status(400).json({ error: 'Yeni Google Gemini API Key daxil edilməlidir' });
       }
 
       const cleanKey = newApiKey.trim();
@@ -169,15 +142,11 @@ function createServer() {
         return res.status(400).json({ error: validation.error || 'Daxil edilən yeni Google Gemini API Key etibarsızdır.' });
       }
 
-      // Rekey account so existing documents and leads are retained
       const updatedUser = userManager.rekeyUserAccount(cleanKey);
-
-      // Invalidate single-use token
-      recoveryManager.consumeRecoveryToken(token);
 
       res.json({
         success: true,
-        message: 'Hesabınız uğurla yeni API açar ilə bərpa olundu və köhnə məlumatlarınız saxlanıldı!',
+        message: 'Google Gemini API açarınız uğurla yeniləndi!',
         user: {
           id: updatedUser.id,
           apiKey: updatedUser.apiKey,

@@ -52,15 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
       sim_header: "AI Test Simulyatoru",
       sim_input_ph: "Bota sual verin...",
       sim_send: "Göndər 🚀",
-      modal_title: "Google Gemini API Açarınızla Giriş",
-      modal_desc: "Bot sizin şəxsi Google Gemini kvotanız üzərindən işləyir.",
-      modal_key_label: "Google Gemini API Key:",
-      modal_submit: "Daxil Ol 🚀",
-      link_recover: "Hesabı bərpa et (E-poçt ilə)",
-      rec_modal_title: "Hesabın Bərpası",
-      rec_modal_desc: "Birdəfəlik keçid təsdiqləndi. Köhnə sənədlərinizə və profilinizə daxil olmaq üçün yeni Google Gemini API açarınızı daxil edin.",
-      rec_modal_new_key_label: "Yeni Google Gemini API Key:",
-      rec_modal_submit: "Hesabı Bərpa Et & Daxil Ol 🚀"
+      modal_title: "Google Gemini API Key və ya Parol ilə Giriş",
+      modal_desc: "Daxil olmaq üçün Google Gemini API açarınızı və ya bərpa parolunuzu daxil edin.",
+      modal_key_label: "API Key və ya Parol:",
+      modal_submit: "Daxil Ol 🚀"
     },
     ru: {
       brand_title: "whatsappbot.hajimammad.com",
@@ -108,15 +103,10 @@ document.addEventListener('DOMContentLoaded', () => {
       sim_header: "AI Тестовый симулятор",
       sim_input_ph: "Задайте вопрос боту...",
       sim_send: "Отправить 🚀",
-      modal_title: "Вход с Google Gemini API Key",
-      modal_desc: "Бот работает на вашей личной квоте Google Gemini.",
-      modal_key_label: "Google Gemini API Key:",
-      modal_submit: "Войти 🚀",
-      link_recover: "Восстановить аккаунт (по почте)",
-      rec_modal_title: "Восстановление аккаунта",
-      rec_modal_desc: "Одноразовая ссылка подтверждена. Введите новый ключ Google Gemini API, чтобы получить доступ к вашим старым документам и профилю.",
-      rec_modal_new_key_label: "Новый Google Gemini API Key:",
-      rec_modal_submit: "Восстановить аккаунт и войти 🚀"
+      modal_title: "Вход по Google Gemini API Key или паролю",
+      modal_desc: "Введите ваш Google Gemini API ключ или пароль восстановления для входа.",
+      modal_key_label: "API Key или Пароль:",
+      modal_submit: "Войти 🚀"
     },
     en: {
       brand_title: "whatsappbot.hajimammad.com",
@@ -164,15 +154,10 @@ document.addEventListener('DOMContentLoaded', () => {
       sim_header: "AI Test Simulator",
       sim_input_ph: "Ask the bot a question...",
       sim_send: "Send 🚀",
-      modal_title: "Sign In with Google Gemini API Key",
-      modal_desc: "The bot operates under your personal Google Gemini quota.",
-      modal_key_label: "Google Gemini API Key:",
-      modal_submit: "Enter 🚀",
-      link_recover: "Recover account (via Email)",
-      rec_modal_title: "Account Recovery",
-      rec_modal_desc: "One-time recovery link verified. Enter your new Google Gemini API key to regain access to your existing documents and profile.",
-      rec_modal_new_key_label: "New Google Gemini API Key:",
-      rec_modal_submit: "Recover Account & Login 🚀"
+      modal_title: "Sign In with Google Gemini API Key or Password",
+      modal_desc: "Enter your Google Gemini API key or recovery password to log in.",
+      modal_key_label: "API Key or Password:",
+      modal_submit: "Enter 🚀"
     }
   };
 
@@ -352,49 +337,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Account Recovery via Email Link
-  const linkRecover = document.getElementById('link-recover-account');
-  const recoverStatusMsg = document.getElementById('recover-status-msg');
-
-  if (linkRecover) {
-    linkRecover.addEventListener('click', async (e) => {
-      e.preventDefault();
-      if (recoverStatusMsg) {
-        recoverStatusMsg.className = 'auth-status-box';
-        recoverStatusMsg.style.backgroundColor = '#1f2c34';
-        recoverStatusMsg.style.color = '#e9edef';
-        recoverStatusMsg.textContent = 'Bərpa linki göndərilir... Zəhmət olmasa gözləyin.';
-        recoverStatusMsg.classList.remove('hidden');
-      }
-      linkRecover.style.pointerEvents = 'none';
-
-      try {
-        const res = await fetch('/api/auth/recover-request', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Bərpa sorğusu göndərilə bilmədi');
-
-        if (recoverStatusMsg) {
-          recoverStatusMsg.style.backgroundColor = 'rgba(0, 168, 132, 0.15)';
-          recoverStatusMsg.style.border = '1px solid #00a884';
-          recoverStatusMsg.style.color = '#25d366';
-          recoverStatusMsg.innerHTML = `✅ ${data.message || 'Bərpa keçidi hajimammada@gmail.com ünvanına göndərildi!'}`;
-        }
-      } catch (err) {
-        if (recoverStatusMsg) {
-          recoverStatusMsg.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
-          recoverStatusMsg.style.border = '1px solid #ef4444';
-          recoverStatusMsg.style.color = '#f87171';
-          recoverStatusMsg.textContent = `❌ ${err.message}`;
-        }
-      } finally {
-        linkRecover.style.pointerEvents = 'auto';
-      }
-    });
-  }
-
   if (authForm) {
     authForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -414,9 +356,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Giriş uğursuz oldu');
 
-        currentApiKey = key;
-        localStorage.setItem('wa_api_key', key);
-        updateSessionDisplay(key);
+        // Store the active authenticated key (resolves to primary key even if recovery pass entered)
+        currentApiKey = (data.user && data.user.apiKey) ? data.user.apiKey : key;
+        localStorage.setItem('wa_api_key', currentApiKey);
+        updateSessionDisplay(currentApiKey);
         hideAuthModal();
 
         // Boot live services for this authenticated user
@@ -1031,83 +974,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  async function initiateRecoveryMode(token) {
-    hideAuthModal();
-    const recModal = document.getElementById('recovery-modal');
-    const recError = document.getElementById('recovery-error-msg');
-    const recForm = document.getElementById('recovery-form');
-    const btnRecSubmit = document.getElementById('btn-recovery-submit');
-    const inputNewKey = document.getElementById('input-new-api-key');
-
-    if (recModal) recModal.classList.remove('hidden');
-
-    try {
-      const res = await fetch(`/api/auth/verify-token?token=${encodeURIComponent(token)}`);
-      const data = await res.json();
-      if (!res.ok || !data.valid) {
-        if (recError) {
-          recError.textContent = data.error || 'Bu bərpa keçidi etibarsızdır və ya vaxtı bitib.';
-          recError.classList.remove('hidden');
-        }
-        if (btnRecSubmit) btnRecSubmit.disabled = true;
-        return;
-      }
-      if (inputNewKey) {
-        setTimeout(() => inputNewKey.focus(), 150);
-      }
-    } catch (err) {
-      if (recError) {
-        recError.textContent = 'Serverlə əlaqə qurula bilmədi: ' + err.message;
-        recError.classList.remove('hidden');
-      }
-    }
-
-    if (recForm) {
-      recForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const newKey = inputNewKey.value.trim();
-        if (!newKey) return;
-
-        btnRecSubmit.disabled = true;
-        btnRecSubmit.textContent = 'Yoxlanılır və bərpa edilir...';
-
-        try {
-          const res = await fetch('/api/auth/recover-confirm', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, newApiKey: newKey })
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Bərpa uğursuz oldu');
-
-          // Clear recovery token from URL bar
-          window.history.replaceState({}, document.title, window.location.pathname);
-
-          currentApiKey = newKey;
-          localStorage.setItem('wa_api_key', newKey);
-          updateSessionDisplay(newKey);
-          if (recModal) recModal.classList.add('hidden');
-
-          // Boot application
-          initSSE();
-          await fetchStatus();
-          await loadDocuments();
-          await loadLeads();
-
-          alert(data.message || 'Hesabınız uğurla yeni API açar ilə bərpa olundu!');
-        } catch (err) {
-          if (recError) {
-            recError.textContent = err.message;
-            recError.classList.remove('hidden');
-          }
-        } finally {
-          btnRecSubmit.disabled = false;
-          btnRecSubmit.textContent = (I18N[currentLang] && I18N[currentLang].rec_modal_submit) || 'Hesabı Bərpa Et & Daxil Ol 🚀';
-        }
-      });
-    }
-  }
-
   async function fetchStatus() {
     if (!currentApiKey) return;
     try {
@@ -1132,12 +998,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setLanguage(currentLang);
   fetchVersion();
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const recoverToken = urlParams.get('recover_token');
-
-  if (recoverToken) {
-    initiateRecoveryMode(recoverToken);
-  } else if (currentApiKey) {
+  if (currentApiKey) {
     updateSessionDisplay(currentApiKey);
     hideAuthModal();
     initSSE();

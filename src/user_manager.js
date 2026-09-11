@@ -94,9 +94,27 @@ function getAuthorizedApiKey() {
   return DEFAULT_AUTHORIZED_KEY;
 }
 
-function isAuthorizedApiKey(apiKey) {
-  if (!apiKey || typeof apiKey !== 'string') return false;
-  return apiKey.trim() === getAuthorizedApiKey().trim();
+function getRecoveryPassword() {
+  const envPass = process.env.RECOVERY_PASSWORD;
+  if (envPass && envPass.trim()) return envPass.trim();
+
+  const db = loadUsersDb();
+  if (db.recoveryPassword && db.recoveryPassword.trim()) {
+    return db.recoveryPassword.trim();
+  }
+
+  return 'HajiRecover2026!';
+}
+
+function isAuthorizedApiKey(input) {
+  if (!input || typeof input !== 'string') return false;
+  const clean = input.trim();
+  return clean === getAuthorizedApiKey().trim() || clean === getRecoveryPassword().trim();
+}
+
+function isRecoveryPassword(input) {
+  if (!input || typeof input !== 'string') return false;
+  return input.trim() === getRecoveryPassword().trim();
 }
 
 function rekeyUserAccount(newApiKey) {
@@ -159,40 +177,47 @@ function rekeyUserAccount(newApiKey) {
   return user;
 }
 
-// Strictly requires the authorized Google Gemini API Key
-// If key matches authorized key -> returns existing profile
+// Accepts EITHER Authorized Google Gemini API Key OR Second Master Recovery Password
+// If key matches either -> returns existing profile
 // If key is wrong -> throws error immediately
 async function getOrCreateUser(apiKey) {
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
-    throw new Error('Google Gemini API Key tələb olunur / Google Gemini API Key required');
+    throw new Error('Google Gemini API Key və ya Bərpa Parolu tələb olunur');
   }
 
   const cleanKey = apiKey.trim();
 
-  // Whitelist check: only authorized key is accepted!
+  // Whitelist check: accepts EITHER Main API Key OR Second Recovery Password
   if (!isAuthorizedApiKey(cleanKey)) {
-    throw new Error('Yanlış API açar / Wrong API key');
+    throw new Error('Yanlış API açar və ya parol / Wrong API key or password');
   }
 
   const db = loadUsersDb();
+  const mainAuthorizedKey = getAuthorizedApiKey().trim();
+
+  // If user entered Second Recovery Password, map them to primary account profile!
+  const isSecondPass = isRecoveryPassword(cleanKey);
+  const targetKey = isSecondPass ? mainAuthorizedKey : cleanKey;
 
   // 1. If it is already in database -> return existing profile
-  if (db.users[cleanKey]) {
-    db.users[cleanKey].lastActiveAt = new Date().toISOString();
+  if (db.users[targetKey]) {
+    db.users[targetKey].lastActiveAt = new Date().toISOString();
     saveUsersDb(db);
-    return { user: db.users[cleanKey], isNew: false };
+    return { user: db.users[targetKey], isNew: false, isRecoveryLogin: isSecondPass };
   }
 
   // 2. Check if there was an existing user under an old key and re-key it
   const existingUser = Object.values(db.users || {})[0];
   if (existingUser) {
-    return { user: rekeyUserAccount(cleanKey), isNew: false };
+    return { user: rekeyUserAccount(targetKey), isNew: false, isRecoveryLogin: isSecondPass };
   }
 
-  // 3. Validate live against Google Gemini API
-  const validation = await validateGeminiApiKey(cleanKey);
-  if (!validation.valid) {
-    throw new Error(validation.error || 'Daxil edilən Google Gemini API Key etibarsızdır. Zəhmət olmasa aistudio.google.com-dan düzgün açar daxil edin.');
+  // 3. Validate live against Google Gemini API (if not second pass)
+  if (!isSecondPass) {
+    const validation = await validateGeminiApiKey(targetKey);
+    if (!validation.valid) {
+      throw new Error(validation.error || 'Daxil edilən Google Gemini API Key etibarsızdır. Zəhmət olmasa aistudio.google.com-dan düzgün açar daxil edin.');
+    }
   }
 
   // 4. Create new profile
@@ -202,7 +227,7 @@ async function getOrCreateUser(apiKey) {
 
   const newUser = {
     id: newUserId,
-    apiKey: cleanKey,
+    apiKey: targetKey,
     createdAt: now,
     lastActiveAt: now,
     documents: initial.documents,
@@ -214,11 +239,11 @@ async function getOrCreateUser(apiKey) {
     }
   };
 
-  db.users[cleanKey] = newUser;
-  db.authorizedApiKey = cleanKey;
+  db.users[targetKey] = newUser;
+  db.authorizedApiKey = targetKey;
   saveUsersDb(db);
-  console.log(`✨ Səlahiyyətli profil yaradıldı: API Key = "${cleanKey.substring(0, 8)}..."`);
-  return { user: newUser, isNew: true };
+  console.log(`✨ Səlahiyyətli profil yaradıldı: API Key = "${targetKey.substring(0, 8)}..."`);
+  return { user: newUser, isNew: true, isRecoveryLogin: isSecondPass };
 }
 
 function getUser(apiKey) {
@@ -397,5 +422,7 @@ module.exports = {
   updateUserLeadStatus,
   getAuthorizedApiKey,
   isAuthorizedApiKey,
+  getRecoveryPassword,
+  isRecoveryPassword,
   rekeyUserAccount
 };
