@@ -77,31 +77,120 @@ function saveUsersDb(db) {
   }
 }
 
-// Strictly requires a valid Google Gemini API Key
-// If key is in DB -> loads existing profile
-// If key is NOT in DB -> validates with Google Gemini API live; if valid, auto-creates profile
+function getAuthorizedApiKey() {
+  const envKey = process.env.AUTHORIZED_API_KEY || process.env.GEMINI_API_KEY;
+  if (envKey && envKey.trim()) return envKey.trim();
+
+  const db = loadUsersDb();
+  if (db.authorizedApiKey && db.authorizedApiKey.trim()) {
+    return db.authorizedApiKey.trim();
+  }
+
+  return '';
+}
+
+function isAuthorizedApiKey(apiKey) {
+  if (!apiKey || typeof apiKey !== 'string') return false;
+  return apiKey.trim() === getAuthorizedApiKey();
+}
+
+function rekeyUserAccount(newApiKey) {
+  if (!newApiKey || typeof newApiKey !== 'string') {
+    throw new Error('Yeni API açar tələb olunur / New API key required');
+  }
+  const cleanNewKey = newApiKey.trim();
+  const db = loadUsersDb();
+  const oldKey = getAuthorizedApiKey();
+
+  // Find user under old key or pick the existing primary user
+  let user = db.users[oldKey] || Object.values(db.users || {})[0];
+
+  if (!user) {
+    const initial = getInitialDocuments();
+    user = {
+      id: 'usr_' + Date.now(),
+      apiKey: cleanNewKey,
+      createdAt: new Date().toISOString(),
+      lastActiveAt: new Date().toISOString(),
+      documents: initial.documents,
+      activeDocumentId: initial.activeDocumentId,
+      leads: [],
+      settings: {
+        human_takeover_minutes: 300,
+        auto_reply_enabled: true
+      }
+    };
+  } else {
+    // Delete old key mapping if different
+    if (user.apiKey && user.apiKey !== cleanNewKey && db.users[user.apiKey]) {
+      delete db.users[user.apiKey];
+    }
+    user.apiKey = cleanNewKey;
+    user.lastActiveAt = new Date().toISOString();
+  }
+
+  db.users[cleanNewKey] = user;
+  db.authorizedApiKey = cleanNewKey;
+  saveUsersDb(db);
+
+  // Update in-memory process.env
+  process.env.AUTHORIZED_API_KEY = cleanNewKey;
+  process.env.GEMINI_API_KEY = cleanNewKey;
+
+  // Persist into .env file if it exists
+  try {
+    const envPath = path.join(__dirname, '..', '.env');
+    if (fs.existsSync(envPath)) {
+      let content = fs.readFileSync(envPath, 'utf-8');
+      content = content.replace(/AUTHORIZED_API_KEY=.*/, `AUTHORIZED_API_KEY=${cleanNewKey}`);
+      content = content.replace(/GEMINI_API_KEY=.*/, `GEMINI_API_KEY=${cleanNewKey}`);
+      fs.writeFileSync(envPath, content, 'utf-8');
+    }
+  } catch (err) {
+    console.warn('Could not update .env file on disk:', err.message);
+  }
+
+  console.log(`🔑 Hesab uğurla yeni API açara keçirildi: ${cleanNewKey.substring(0, 8)}...`);
+  return user;
+}
+
+// Strictly requires the authorized Google Gemini API Key
+// If key matches authorized key -> returns existing profile
+// If key is wrong -> throws error immediately
 async function getOrCreateUser(apiKey) {
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
     throw new Error('Google Gemini API Key tələb olunur / Google Gemini API Key required');
   }
 
   const cleanKey = apiKey.trim();
+
+  // Whitelist check: only authorized key is accepted!
+  if (!isAuthorizedApiKey(cleanKey)) {
+    throw new Error('Yanlış API açar / Wrong API key');
+  }
+
   const db = loadUsersDb();
 
-  // 1. If it is already in database -> return existing profile (no recreation)
+  // 1. If it is already in database -> return existing profile
   if (db.users[cleanKey]) {
     db.users[cleanKey].lastActiveAt = new Date().toISOString();
     saveUsersDb(db);
     return { user: db.users[cleanKey], isNew: false };
   }
 
-  // 2. Validate live against Google Gemini API
+  // 2. Check if there was an existing user under an old key and re-key it
+  const existingUser = Object.values(db.users || {})[0];
+  if (existingUser) {
+    return { user: rekeyUserAccount(cleanKey), isNew: false };
+  }
+
+  // 3. Validate live against Google Gemini API
   const validation = await validateGeminiApiKey(cleanKey);
   if (!validation.valid) {
     throw new Error(validation.error || 'Daxil edilən Google Gemini API Key etibarsızdır. Zəhmət olmasa aistudio.google.com-dan düzgün açar daxil edin.');
   }
 
-  // 3. Valid key -> system automatically creates new profile and saves in DB
+  // 4. Create new profile
   const newUserId = 'usr_' + Date.now();
   const now = new Date().toISOString();
   const initial = getInitialDocuments();
@@ -121,8 +210,9 @@ async function getOrCreateUser(apiKey) {
   };
 
   db.users[cleanKey] = newUser;
+  db.authorizedApiKey = cleanKey;
   saveUsersDb(db);
-  console.log(`✨ Yeni profil avtomatik yaradıldı və bazaya qeyd olundu: API Key = "${cleanKey.substring(0, 8)}..."`);
+  console.log(`✨ Səlahiyyətli profil yaradıldı: API Key = "${cleanKey.substring(0, 8)}..."`);
   return { user: newUser, isNew: true };
 }
 
@@ -299,5 +389,8 @@ module.exports = {
   setUserActiveDocument,
   deleteUserDocument,
   recordUserLead,
-  updateUserLeadStatus
+  updateUserLeadStatus,
+  getAuthorizedApiKey,
+  isAuthorizedApiKey,
+  rekeyUserAccount
 };

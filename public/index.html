@@ -256,14 +256,47 @@
       <form id="auth-form" class="modal-form">
         <div class="form-group">
           <label for="input-api-key"><strong data-i18n="modal_key_label">Google Gemini API Key:</strong></label>
-          <input type="text" id="input-api-key" class="form-input" placeholder="AIzaSy..." required autocomplete="off">
-          <span class="input-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">
+          <input type="password" id="input-api-key" class="form-input" placeholder="AQ.Ab8... və ya AIzaSy..." required autocomplete="off">
+          <span class="input-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
             <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--accent-blue); text-decoration: underline;">Google AI Studio</a>
+            <button type="button" id="btn-toggle-key-visibility" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 12px;">👁️ Göstər</button>
           </span>
         </div>
         <div id="auth-error-msg" class="auth-error hidden" style="color: #f87171; font-size: 12px; margin-bottom: 8px;"></div>
         <div class="modal-actions">
           <button type="submit" class="btn btn-primary btn-block" id="btn-auth-submit" style="width: 100%; padding: 12px; font-size: 14px;" data-i18n="modal_submit">Daxil Ol 🚀</button>
+        </div>
+        <div class="modal-footer-links" style="margin-top: 14px; text-align: center;">
+          <a href="#" id="link-recover-account" style="color: var(--accent-green); font-size: 13px; text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 4px;">
+            🔐 <span data-i18n="link_recover">Hesabı bərpa et (E-poçt ilə)</span>
+          </a>
+        </div>
+        <div id="recover-status-msg" class="auth-status-box hidden" style="margin-top: 12px; font-size: 12px; padding: 10px 14px; border-radius: 6px; text-align: center; line-height: 1.4;"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- One-Time Account Recovery Modal -->
+  <div class="modal-overlay hidden" id="recovery-modal">
+    <div class="modal-card glass-card">
+      <div class="modal-header">
+        <div class="modal-icon">🔐</div>
+        <h3 data-i18n="rec_modal_title">Hesabın Bərpası</h3>
+        <p class="modal-desc" data-i18n="rec_modal_desc">
+          Birdəfəlik keçid təsdiqləndi. Köhnə sənədlərinizə və profilinizə daxil olmaq üçün <strong>yeni Google Gemini API açarınızı</strong> daxil edin.
+        </p>
+      </div>
+      <form id="recovery-form" class="modal-form">
+        <div class="form-group">
+          <label for="input-new-api-key"><strong data-i18n="rec_modal_new_key_label">Yeni Google Gemini API Key:</strong></label>
+          <input type="text" id="input-new-api-key" class="form-input" placeholder="AQ.Ab8... və ya AIzaSy..." required autocomplete="off">
+          <span class="input-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--accent-blue); text-decoration: underline;">Google AI Studio</a>
+          </span>
+        </div>
+        <div id="recovery-error-msg" class="auth-error hidden" style="color: #f87171; font-size: 12px; margin-bottom: 8px;"></div>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary btn-block" id="btn-recovery-submit" style="width: 100%; padding: 12px; font-size: 14px;" data-i18n="rec_modal_submit">Hesabı Bərpa Et & Daxil Ol 🚀</button>
         </div>
       </form>
     </div>

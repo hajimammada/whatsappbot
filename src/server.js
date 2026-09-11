@@ -6,7 +6,8 @@ const { execSync } = require('child_process');
 
 const waClient = require('./whatsapp_client');
 const userManager = require('./user_manager');
-const { generateAIResponse, getAgentSettings } = require('./ai_engine');
+const { generateAIResponse, getAgentSettings, validateGeminiApiKey } = require('./ai_engine');
+const recoveryManager = require('./recovery_manager');
 
 function getAppVersion() {
   if (process.env.APP_VERSION) {
@@ -38,7 +39,7 @@ function getAppVersion() {
     }
   } catch (err) {}
 
-  return 'v3.2.6';
+  return 'v3.2.7';
 }
 
 function createServer() {
@@ -124,12 +125,73 @@ function createServer() {
         }
       });
     } catch (err) {
+      res.status(401).json({ error: err.message });
+    }
+  });
+
+  // Recovery API: Request One-Time Email Recovery
+  app.post('/api/auth/recover-request', async (req, res) => {
+    try {
+      const hostUrl = `${req.protocol}://${req.get('host')}`;
+      const result = await recoveryManager.sendRecoveryEmail(hostUrl);
+      res.json(result);
+    } catch (err) {
+      console.error('Recovery request error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Recovery API: Verify One-Time Token
+  app.get('/api/auth/verify-token', (req, res) => {
+    const token = req.query.token;
+    const verification = recoveryManager.verifyRecoveryToken(token);
+    if (!verification.valid) {
+      return res.status(400).json({ valid: false, error: verification.error });
+    }
+    res.json({ valid: true, expiresAt: verification.tokenData.expiresAt });
+  });
+
+  // Recovery API: Confirm New Key & Restore Old Account
+  app.post('/api/auth/recover-confirm', async (req, res) => {
+    try {
+      const { token, newApiKey } = req.body;
+      if (!token) return res.status(400).json({ error: 'Bərpa tokeni tapılmadı' });
+      if (!newApiKey || !newApiKey.trim()) return res.status(400).json({ error: 'Yeni Google Gemini API Key daxil edilməlidir' });
+
+      const verification = recoveryManager.verifyRecoveryToken(token);
+      if (!verification.valid) {
+        return res.status(400).json({ error: verification.error });
+      }
+
+      const cleanKey = newApiKey.trim();
+      const validation = await validateGeminiApiKey(cleanKey);
+      if (!validation.valid) {
+        return res.status(400).json({ error: validation.error || 'Daxil edilən yeni Google Gemini API Key etibarsızdır.' });
+      }
+
+      // Rekey account so existing documents and leads are retained
+      const updatedUser = userManager.rekeyUserAccount(cleanKey);
+
+      // Invalidate single-use token
+      recoveryManager.consumeRecoveryToken(token);
+
+      res.json({
+        success: true,
+        message: 'Hesabınız uğurla yeni API açar ilə bərpa olundu və köhnə məlumatlarınız saxlanıldı!',
+        user: {
+          id: updatedUser.id,
+          apiKey: updatedUser.apiKey,
+          documentCount: (updatedUser.documents || []).length,
+          activeDocumentId: updatedUser.activeDocumentId
+        }
+      });
+    } catch (err) {
       res.status(400).json({ error: err.message });
     }
   });
 
-  // SSE stream endpoint
-  app.get('/api/events', (req, res) => {
+  // SSE stream endpoint (Authenticated)
+  app.get('/api/events', requireAuth, (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -145,8 +207,8 @@ function createServer() {
     });
   });
 
-  // Get status
-  app.get('/api/status', (req, res) => {
+  // Get status (Authenticated)
+  app.get('/api/status', requireAuth, (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.json({
       ...waClient.getStatus(),
@@ -154,7 +216,7 @@ function createServer() {
     });
   });
 
-  // Get app version info dynamically
+  // Get app version info dynamically (Public)
   app.get('/api/version', (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.json({
@@ -163,31 +225,31 @@ function createServer() {
     });
   });
 
-  // Toggle Auto-Reply
-  app.post('/api/auto-reply', (req, res) => {
+  // Toggle Auto-Reply (Authenticated)
+  app.post('/api/auto-reply', requireAuth, (req, res) => {
     const { enabled } = req.body;
     waClient.setAutoReply(enabled);
     res.json({ success: true, autoReplyEnabled: waClient.autoReplyEnabled });
   });
 
-  // Per-Chat Human Takeover & Resume endpoints
-  app.get('/api/chat-statuses', (req, res) => {
+  // Per-Chat Human Takeover & Resume endpoints (Authenticated)
+  app.get('/api/chat-statuses', requireAuth, (req, res) => {
     res.json(waClient.getAllChatStatuses());
   });
 
-  app.post('/api/chat/:phone/resume', (req, res) => {
+  app.post('/api/chat/:phone/resume', requireAuth, (req, res) => {
     const result = waClient.resumeBotForChat(req.params.phone);
     res.json(result);
   });
 
-  app.post('/api/chat/:phone/pause', (req, res) => {
+  app.post('/api/chat/:phone/pause', requireAuth, (req, res) => {
     const minutes = req.body.minutes || 300;
     const result = waClient.pauseBotForChat(req.params.phone, minutes);
     res.json(result);
   });
 
-  // Reconnect / Logout
-  app.post('/api/whatsapp/reconnect', async (req, res) => {
+  // Reconnect / Logout (Authenticated)
+  app.post('/api/whatsapp/reconnect', requireAuth, async (req, res) => {
     try {
       await waClient.start();
       res.json({ success: true, message: 'Reconnecting...' });
@@ -196,7 +258,7 @@ function createServer() {
     }
   });
 
-  app.post('/api/whatsapp/logout', async (req, res) => {
+  app.post('/api/whatsapp/logout', requireAuth, async (req, res) => {
     try {
       await waClient.logout();
       res.json({ success: true, message: 'Logged out.' });
