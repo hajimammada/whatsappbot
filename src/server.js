@@ -39,7 +39,7 @@ function getAppVersion() {
     }
   } catch (err) {}
 
-  return 'v3.2.7';
+  return 'v3.2.8';
 }
 
 function createServer() {
