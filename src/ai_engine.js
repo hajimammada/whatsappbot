@@ -241,22 +241,32 @@ async function validateGeminiApiKey(apiKey) {
     return { valid: true };
   }
 
-  try {
-    const genAI = new GoogleGenerativeAI(cleanKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    await model.generateContent("Test connection ping");
-    return { valid: true };
-  } catch (err) {
-    const msg = err.message || '';
-    if (msg.includes('API_KEY_INVALID') || msg.includes('400') || msg.includes('API key not valid') || msg.includes('403')) {
-      return { valid: false, error: 'Daxil edilən Google Gemini API Key etibarsızdır. Google AI Studio-dan düzgün açar əldə edin (aistudio.google.com).' };
+  const validationModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'];
+  let lastErr = null;
+
+  for (const modelName of validationModels) {
+    try {
+      const genAI = new GoogleGenerativeAI(cleanKey);
+      const model = genAI.getGenerativeModel({ model: modelName });
+      await model.generateContent("ping");
+      return { valid: true };
+    } catch (err) {
+      lastErr = err;
+      const msg = err.message || '';
+      if (msg.includes('API_KEY_INVALID') || msg.includes('400') || msg.includes('API key not valid') || msg.includes('403') || msg.includes('UNAUTHENTICATED')) {
+        return { valid: false, error: 'Daxil edilən Google Gemini API Key etibarsızdır. Google AI Studio-dan düzgün açar əldə edin (aistudio.google.com).' };
+      }
+      if (msg.includes('429') || msg.includes('quota') || msg.includes('ResourceExhausted')) {
+        // Key is valid, just quota was reached on free tier
+        return { valid: true, warning: 'Açar etibarlıdır, lakin Google kvotası tükənib.' };
+      }
+      // If 404 on this model or 503, try next candidate model
+      continue;
     }
-    if (msg.includes('429') || msg.includes('quota') || msg.includes('ResourceExhausted')) {
-      // Key is valid, just quota was reached on free tier
-      return { valid: true, warning: 'Açar etibarlıdır, lakin Google kvotası tükənib.' };
-    }
-    return { valid: false, error: 'Google Gemini API ilə əlaqə qurula bilmədi: ' + msg };
   }
+
+  const errorMsg = lastErr ? (lastErr.message || '') : 'Unknown error';
+  return { valid: false, error: 'Google Gemini API ilə əlaqə qurula bilmədi: ' + errorMsg };
 }
 
 async function generateAIResponse(contactId, incomingMessage, customActiveDoc = null, userGeminiKey = null) {
@@ -272,10 +282,10 @@ async function generateAIResponse(contactId, incomingMessage, customActiveDoc = 
   if (geminiKey && geminiKey !== 'your_gemini_api_key_here') {
     const configuredModel = agentSettings.models?.gemini?.model_name;
     const candidateModels = [
-      configuredModel && configuredModel !== 'gemini-3.6-flash' ? configuredModel : 'gemini-1.5-flash',
-      'gemini-1.5-flash',
-      'gemini-2.0-flash',
-      'gemini-1.5-pro'
+      configuredModel && !configuredModel.includes('1.5') && !configuredModel.includes('3.6') && !configuredModel.includes('2.0') ? configuredModel : 'gemini-2.5-flash',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+      'gemini-2.5-pro'
     ];
     const uniqueModels = [...new Set(candidateModels)];
 
