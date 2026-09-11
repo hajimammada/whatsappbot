@@ -243,7 +243,7 @@ async function validateGeminiApiKey(apiKey) {
 
   try {
     const genAI = new GoogleGenerativeAI(cleanKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     await model.generateContent("Test connection ping");
     return { valid: true };
   } catch (err) {
@@ -270,36 +270,55 @@ async function generateAIResponse(contactId, incomingMessage, customActiveDoc = 
   const systemPrompt = buildSystemPrompt(activeDoc);
 
   if (geminiKey && geminiKey !== 'your_gemini_api_key_here') {
-    try {
-      const genAI = new GoogleGenerativeAI(geminiKey);
-      const modelName = (agentSettings.models && agentSettings.models.gemini && agentSettings.models.gemini.model_name) || "gemini-3.6-flash";
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: (agentSettings.models && agentSettings.models.gemini && agentSettings.models.gemini.temperature) || 0.3
+    const configuredModel = agentSettings.models?.gemini?.model_name;
+    const candidateModels = [
+      configuredModel && configuredModel !== 'gemini-3.6-flash' ? configuredModel : 'gemini-1.5-flash',
+      'gemini-1.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-pro'
+    ];
+    const uniqueModels = [...new Set(candidateModels)];
+
+    let lastError = null;
+
+    for (const modelName of uniqueModels) {
+      try {
+        const genAI = new GoogleGenerativeAI(geminiKey);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: (agentSettings.models && agentSettings.models.gemini && agentSettings.models.gemini.temperature) || 0.3
+          }
+        });
+
+        const conversationText = history.map(h => `${h.role === 'user' ? 'İstifadəçi' : 'Köməkçi'}: ${h.text}`).join('\n');
+        const prompt = `${systemPrompt}\n\n### SÖHBƏT TARİXÇƏSİ:\n${conversationText}\n\nİstifadəçi: ${incomingMessage}\n\nJSON Cavab:`;
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+        const parsed = JSON.parse(responseText);
+
+        appendToChatHistory(contactId, 'user', incomingMessage);
+        appendToChatHistory(contactId, 'assistant', parsed.reply_text);
+        return parsed;
+      } catch (err) {
+        lastError = err;
+        console.warn(`Gemini model ${modelName} call failed:`, err.message);
+
+        // If invalid key, fail immediately
+        if (err.message.includes('API_KEY_INVALID') || err.message.includes('400') || err.message.includes('403') || err.message.includes('API key not valid')) {
+          throw new Error('Google Gemini API açarınız etibarsızdır və ya bloklanıb.');
         }
-      });
 
-      const conversationText = history.map(h => `${h.role === 'user' ? 'İstifadəçi' : 'Köməkçi'}: ${h.text}`).join('\n');
-      const prompt = `${systemPrompt}\n\n### SÖHBƏT TARİXÇƏSİ:\n${conversationText}\n\nİstifadəçi: ${incomingMessage}\n\nJSON Cavab:`;
-
-      const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
-      const parsed = JSON.parse(responseText);
-
-      appendToChatHistory(contactId, 'user', incomingMessage);
-      appendToChatHistory(contactId, 'assistant', parsed.reply_text);
-      return parsed;
-    } catch (err) {
-      console.warn('Gemini API call failed for user key:', err.message);
-      if (err.message.includes('429') || err.message.includes('quota') || err.message.includes('ResourceExhausted')) {
-        throw new Error('Google Gemini API kvotanız dolub (Rate Limit / 429 Quota Exceeded). Zəhmət olmasa aistudio.google.com-dan hesabınızı yoxlayın.');
+        // Otherwise (503 high demand, 429 quota, model unavailable), try next candidate model
+        continue;
       }
-      if (err.message.includes('API_KEY_INVALID') || err.message.includes('400') || err.message.includes('403') || err.message.includes('API key not valid')) {
-        throw new Error('Google Gemini API açarınız etibarsızdır və ya bloklanıb.');
-      }
-      throw new Error('Gemini API ilə əlaqə xətası: ' + err.message);
+    }
+
+    // If all models failed with 503 or 429, log and fall through to resilient fallback engine
+    if (lastError) {
+      console.warn('All Gemini candidate models temporarily unavailable, falling back to internal rule engine.');
     }
   }
 

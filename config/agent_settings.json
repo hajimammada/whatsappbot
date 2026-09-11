@@ -13,7 +13,7 @@
   "blacklisted_numbers": [],
   "models": {
     "gemini": {
-      "model_name": "gemini-3.6-flash",
+      "model_name": "gemini-1.5-flash",
       "temperature": 0.3
     },
     "openai": {
