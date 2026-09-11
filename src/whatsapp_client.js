@@ -22,6 +22,7 @@ class WhatsAppClient {
     this.recentMessages = [];
     this.cooldowns = new Map(); // sender -> timestamp
     this.humanTakeovers = new Map(); // remoteJid -> timestamp
+    this.botSentMessageIds = new Set(); // message ID -> true
     this.eventListeners = [];
   }
 
@@ -195,6 +196,12 @@ class WhatsAppClient {
 
         const senderPhone = remoteJid.replace(/@.+/, '');
 
+        // Ignore messages sent by the bot itself (prevent self-pause echo loop)
+        if (msg.key.id && this.botSentMessageIds.has(msg.key.id)) {
+          this.botSentMessageIds.delete(msg.key.id);
+          continue;
+        }
+
         // Extract message text
         const text =
           msg.message?.conversation ||
@@ -202,23 +209,26 @@ class WhatsAppClient {
           msg.message?.imageMessage?.caption ||
           '';
 
+        // Ignore empty messages, receipts, app state syncs, media without caption
+        if (!text || text.trim() === '') continue;
+
         // 1. HUMAN TAKEOVER:
-        // If YOU send a message in this chat, bot pauses for that contact and notifies dashboard
+        // If YOU manually type and send a message in this chat, bot pauses only for this contact
         if (msg.key.fromMe) {
           const settings = getAgentSettings();
-          const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 300;
-          this.humanTakeovers = this.humanTakeovers || new Map();
-          this.humanTakeovers.set(remoteJid, Date.now());
-          console.log(`👤 Siz +${senderPhone} ilə şəxsən söhbətə daxil oldunuz. Bot bu çatda ${takeoverMinutes} dəqiqə (${Math.round(takeoverMinutes/60)} saat) avtomatik susacaq.`);
-          this.notifySubscribers('chat_status_updated', {
-            phone: senderPhone,
-            isPaused: true,
-            remainingMinutes: takeoverMinutes
-          });
+          const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 30;
+          if (takeoverMinutes > 0) {
+            this.humanTakeovers = this.humanTakeovers || new Map();
+            this.humanTakeovers.set(remoteJid, Date.now());
+            console.log(`👤 Siz +${senderPhone} ilə şəxsən söhbətə daxil oldunuz. Bot bu çatda ${takeoverMinutes} dəqiqə avtomatik susacaq.`);
+            this.notifySubscribers('chat_status_updated', {
+              phone: senderPhone,
+              isPaused: true,
+              remainingMinutes: takeoverMinutes
+            });
+          }
           continue;
         }
-
-        if (!text || text.trim() === '') continue;
 
         const pushName = msg.pushName || 'WhatsApp İstifadəçisi';
 
@@ -226,12 +236,12 @@ class WhatsAppClient {
 
         // Check if Owner is currently chatting in this conversation
         const settings = getAgentSettings();
-        const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 300;
+        const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 30;
         this.humanTakeovers = this.humanTakeovers || new Map();
         const lastHumanMessage = this.humanTakeovers.get(remoteJid) || 0;
 
-        if (Date.now() - lastHumanMessage < takeoverMinutes * 60 * 1000) {
-          console.log(`👤 Siz şəxsən söhbətdə olduğunuz üçün bot +${senderPhone} nömrəsinə mane olmur (${takeoverMinutes} dəqiqəlik / 5 saatlıq sükut aktivdir).`);
+        if (takeoverMinutes > 0 && Date.now() - lastHumanMessage < takeoverMinutes * 60 * 1000) {
+          console.log(`👤 Siz şəxsən söhbətdə olduğunuz üçün bot +${senderPhone} nömrəsinə mane olmur (${takeoverMinutes} dəqiqəlik sükut aktivdir).`);
           const logEntry = {
             id: msg.key.id,
             from: senderPhone,
@@ -291,21 +301,28 @@ class WhatsAppClient {
 
           // CRITICAL SAFETY CHECK: Did the owner speak while AI was generating?
           const currentHumanTime = this.humanTakeovers.get(remoteJid) || 0;
-          if (currentHumanTime >= processStartTime || Date.now() - currentHumanTime < takeoverMinutes * 60 * 1000) {
+          if (takeoverMinutes > 0 && (currentHumanTime >= processStartTime || Date.now() - currentHumanTime < takeoverMinutes * 60 * 1000)) {
             console.log(`🛑 Siz bu arada mesaj yazdığınız üçün hazırlanmış AI cavabı ləğv edildi və alıcıya göndərilmədi!`);
             continue;
           }
 
           console.log(`📤 Sending AI Reply to +${senderPhone}: "${aiResponse.reply_text}"`);
 
-          // Send WhatsApp reply
-          await this.socket.sendMessage(remoteJid, { text: aiResponse.reply_text });
+          // Send WhatsApp reply and record ID so bot doesn't consider its own reply as human takeover
+          const sent = await this.socket.sendMessage(remoteJid, { text: aiResponse.reply_text });
+          if (sent?.key?.id) {
+            this.botSentMessageIds.add(sent.key.id);
+            if (this.botSentMessageIds.size > 2000) {
+              const first = this.botSentMessageIds.values().next().value;
+              this.botSentMessageIds.delete(first);
+            }
+          }
 
           // Record Lead and Appointment
           await recordLead(senderPhone, text, aiResponse);
 
           const outgoingLog = {
-            id: 'reply_' + Date.now(),
+            id: (sent?.key?.id) || ('reply_' + Date.now()),
             to: senderPhone,
             text: aiResponse.reply_text,
             direction: 'outgoing',

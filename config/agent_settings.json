@@ -3,7 +3,7 @@
   "language_priority": ["az", "ru", "en"],
   "response_style": "Kibar, dəqiq, qısa və peşəkar. Uzun mətnlər yazma, suallara birbaşa və aydın cavab ver.",
   "cooldown_seconds": 10,
-  "human_takeover_minutes": 300,
+  "human_takeover_minutes": 30,
   "ignore_groups": true,
   "ignore_status_broadcasts": true,
   "auto_reply_enabled": true,
