@@ -1,0 +1,43 @@
+name: 24/7 Keep-Alive Ping
+
+on:
+  schedule:
+    # Runs every 10 minutes, 24/7 (keeps Render container continuously awake)
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      custom_url:
+        description: 'Optional custom URL to ping'
+        required: false
+        default: 'https://whatsappbot.hajimammad.com'
+
+jobs:
+  ping:
+    name: Ping whatsappbot.hajimammad.com
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Application
+        run: |
+          TARGET_URL="${{ github.event.inputs.custom_url || secrets.APP_URL }}"
+          if [ -z "$TARGET_URL" ]; then
+            TARGET_URL="https://whatsappbot.hajimammad.com"
+          fi
+
+          echo "🌐 Pinging: $TARGET_URL at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          
+          # Ping /api/health endpoint
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$TARGET_URL/api/health" || echo "000")
+          echo "Health endpoint HTTP code: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -eq 200 ] || [ "$HTTP_STATUS" -eq 301 ] || [ "$HTTP_STATUS" -eq 302 ]; then
+            echo "✅ Ping successful! whatsappbot.hajimammad.com is active and awake."
+          else
+            echo "⚠️ Health endpoint returned $HTTP_STATUS, pinging root URL..."
+            ROOT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$TARGET_URL/" || echo "000")
+            echo "Root URL HTTP code: $ROOT_STATUS"
+            if [ "$ROOT_STATUS" -ge 200 ] && [ "$ROOT_STATUS" -lt 400 ]; then
+              echo "✅ Root ping successful! App is awake."
+            else
+              echo "⚠️ App returned HTTP status $ROOT_STATUS."
+            fi
+          fi

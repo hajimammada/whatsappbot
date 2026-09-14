@@ -107,8 +107,20 @@ async function runTests() {
       headers: { 'X-API-Key': adminPassword }
     });
     assert.strictEqual(res4.status, 200, 'Expected 200 OK for status with admin password');
-    assert.strictEqual(res4.data.version, 'v3.5.0');
+    assert.strictEqual(res4.data.version, 'v3.5.1');
     console.log(`   ✅ Passed: Status returned successfully (Version: ${res4.data.version})`);
+
+    // Verify unauthenticated /api/health endpoint for 24/7 Keep-Alive
+    const resHealth = await makeRequest({
+      hostname: 'localhost',
+      port: 3099,
+      path: '/api/health',
+      method: 'GET'
+    });
+    assert.strictEqual(resHealth.status, 200);
+    assert.strictEqual(resHealth.data.status, 'ok');
+    assert.strictEqual(resHealth.data.service, 'whatsappbot.hajimammad.com');
+    console.log('   ✅ Passed: /api/health endpoint returns 200 OK for keep-alive pings!');
 
     // Verify CORS permits onrender.com
     const resCors = await makeRequest({

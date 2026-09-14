@@ -39,7 +39,7 @@ function getAppVersion() {
     // Git command not available
   }
 
-  return 'v3.5.0';
+  return 'v3.5.1';
 }
 
 function createServer() {
@@ -236,6 +236,17 @@ function createServer() {
     res.json({
       name: 'whatsappbot.hajimammad.com',
       version: getAppVersion()
+    });
+  });
+
+  // Health check endpoint for Keep-Alive pings (Public)
+  app.get('/api/health', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.json({
+      status: 'ok',
+      service: 'whatsappbot.hajimammad.com',
+      version: getAppVersion(),
+      timestamp: new Date().toISOString()
     });
   });
 
