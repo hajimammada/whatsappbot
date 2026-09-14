@@ -399,7 +399,17 @@ document.addEventListener('DOMContentLoaded', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ password: pass })
         });
-        const data = await res.json();
+        const contentType = res.headers.get('content-type') || '';
+        let data = {};
+        if (contentType.includes('application/json')) {
+          data = await res.json();
+        } else {
+          const text = await res.text();
+          if (res.status === 502 || res.status === 504) {
+            throw new Error(currentLang === 'en' ? 'Server is waking up (502/504). Please try again in a few seconds.' : 'Server oyanır / yuxudan qalxır (502/504). Zəhmət olmasa bir neçə saniyə sonra yenidən cəhd edin.');
+          }
+          throw new Error(data.error || `Server xətası (${res.status}). Zəhmət olmasa yenidən yoxlayın.`);
+        }
         if (!res.ok) throw new Error(data.error || 'Giriş uğursuz oldu');
 
         currentAuthToken = pass;

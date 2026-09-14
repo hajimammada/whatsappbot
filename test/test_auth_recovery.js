@@ -107,8 +107,22 @@ async function runTests() {
       headers: { 'X-API-Key': adminPassword }
     });
     assert.strictEqual(res4.status, 200, 'Expected 200 OK for status with admin password');
-    assert.strictEqual(res4.data.version, 'v3.4.9');
+    assert.strictEqual(res4.data.version, 'v3.5.0');
     console.log(`   ✅ Passed: Status returned successfully (Version: ${res4.data.version})`);
+
+    // Verify CORS permits onrender.com
+    const resCors = await makeRequest({
+      hostname: 'localhost',
+      port: 3099,
+      path: '/api/status',
+      method: 'OPTIONS',
+      headers: {
+        'Origin': 'https://whatsappbot-8wk2.onrender.com',
+        'Access-Control-Request-Method': 'GET'
+      }
+    });
+    assert.strictEqual(resCors.headers['access-control-allow-origin'], 'https://whatsappbot-8wk2.onrender.com');
+    console.log('   ✅ Passed: CORS correctly allows both hajimammad.com and onrender.com domains!');
 
     // -------------------------------------------------------------
     // Test 5: In-cabinet API key update via POST /api/auth/update-key MUST succeed (200)

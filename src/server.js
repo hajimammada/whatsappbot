@@ -39,13 +39,13 @@ function getAppVersion() {
     // Git command not available
   }
 
-  return 'v3.4.9';
+  return 'v3.5.0';
 }
 
 function createServer() {
   const app = express();
   
-  // Strict CORS policy
+  // CORS policy: Supports custom domain (hajimammad.com), Render domain (*.onrender.com), and localhost
   const allowedOrigins = [
     'https://whatsappbot.hajimammad.com',
     'http://localhost:3000',
@@ -53,7 +53,13 @@ function createServer() {
   ];
   app.use(cors({
     origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
+      if (
+        !origin || 
+        allowedOrigins.includes(origin) || 
+        origin.startsWith('http://localhost:') ||
+        origin.endsWith('.onrender.com') ||
+        origin.includes('hajimammad.com')
+      ) {
         callback(null, true);
       } else {
         callback(new Error('CORS not allowed'));
