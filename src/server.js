@@ -39,7 +39,7 @@ function getAppVersion() {
     // Git command not available
   }
 
-  return 'v3.5.1';
+  return 'v3.5.2';
 }
 
 function createServer() {
