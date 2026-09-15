@@ -209,6 +209,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  const MONTH_NAMES = {
+    az: ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'İyn', 'İyl', 'Avq', 'Sen', 'Okt', 'Noy', 'Dek'],
+    ru: ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'],
+    en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  };
+
+  function formatDateTime(dateInput, lang = currentLang) {
+    if (!dateInput) return '';
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '';
+
+    const day = d.getDate();
+    const monthIdx = d.getMonth();
+    const months = MONTH_NAMES[lang] || MONTH_NAMES.az;
+    const monthStr = months[monthIdx] || (monthIdx + 1);
+
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+
+    return `${day} ${monthStr} ${hours}:${minutes}`;
+  }
+
   let currentLang = localStorage.getItem('app_lang') || 'az';
 
   function setLanguage(lang) {
@@ -808,7 +830,7 @@ document.addEventListener('DOMContentLoaded', () => {
     docList.innerHTML = documents.map(d => {
       const isActive = d.id === activeDocumentId;
       const isSelected = d.id === selectedDocumentId;
-      const updatedDate = d.updatedAt ? new Date(d.updatedAt).toLocaleDateString(currentLang === 'en' ? 'en-US' : (currentLang === 'ru' ? 'ru-RU' : 'az-AZ'), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+      const updatedDate = d.updatedAt ? formatDateTime(d.updatedAt, currentLang) : '';
 
       return `
         <div class="doc-item ${isActive ? 'active-kb' : ''} ${isSelected ? 'selected' : ''}" data-id="${d.id}">
@@ -980,7 +1002,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const isViewing = l.status === 'viewing_requested';
       const aptTime = (l.viewingAppointments && l.viewingAppointments[0]?.preferred_time) || '-';
       const contactDate = l.lastContact || l.firstContact || new Date().toISOString();
-      const dateFormatted = new Date(contactDate).toLocaleString(currentLang === 'en' ? 'en-US' : (currentLang === 'ru' ? 'ru-RU' : 'az-AZ'), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const dateFormatted = formatDateTime(contactDate, currentLang);
 
       const chatStatus = chatStatuses[l.phoneNumber] || (l.lid && chatStatuses[l.lid]);
       const isPaused = chatStatus && chatStatus.isPaused;
