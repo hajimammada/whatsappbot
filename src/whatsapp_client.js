@@ -12,6 +12,34 @@ const pkg = require('../package.json');
 const AUTH_DIR = path.join(__dirname, '..', 'auth_info_baileys');
 const LID_MAPPINGS_FILE = path.join(__dirname, '..', 'data', 'lid_mappings.json');
 
+function archiveAuthDir() {
+  try {
+    if (!fs.existsSync(AUTH_DIR)) return;
+    const files = fs.readdirSync(AUTH_DIR);
+    if (!files || files.length === 0) return;
+
+    const trashDir = path.join(__dirname, '..', 'trash', 'auth_sessions', `session_${Date.now()}`);
+    fs.mkdirSync(trashDir, { recursive: true });
+
+    for (const file of files) {
+      if (file === 'trash') continue;
+      const srcPath = path.join(AUTH_DIR, file);
+      const destPath = path.join(trashDir, file);
+      try {
+        fs.renameSync(srcPath, destPath);
+      } catch (e) {
+        try {
+          fs.copyFileSync(srcPath, destPath);
+          fs.unlinkSync(srcPath);
+        } catch (e2) {}
+      }
+    }
+    console.log(`📦 WhatsApp session credentials archived to trash: ${trashDir}`);
+  } catch (err) {
+    console.error('Error archiving auth directory:', err);
+  }
+}
+
 class WhatsAppClient {
   constructor() {
     this.socket = null;
@@ -304,6 +332,14 @@ class WhatsAppClient {
   }
 
   async start() {
+    if (this.socket) {
+      try {
+        this.socket.ev.removeAllListeners();
+        this.socket.end(undefined);
+      } catch (e) {}
+      this.socket = null;
+    }
+
     if (!fs.existsSync(AUTH_DIR)) {
       fs.mkdirSync(AUTH_DIR, { recursive: true });
     }
@@ -356,17 +392,25 @@ class WhatsAppClient {
 
       if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 403;
         this.status = 'disconnected';
         this.qrCodeRaw = null;
         this.qrCodeDataUrl = null;
         this.userInfo = null;
 
-        console.log(`WhatsApp connection closed (Status code: ${statusCode}). Reconnecting: ${shouldReconnect}`);
+        console.log(`WhatsApp connection closed (Status code: ${statusCode}). Is logged out: ${isLoggedOut}`);
         this.notifySubscribers('status_change', { status: this.status });
 
-        if (shouldReconnect) {
-          setTimeout(() => this.start(), 4000);
+        if (isLoggedOut) {
+          console.log('⚠️ WhatsApp session was logged out or unlinked. Archiving session credentials and generating a new QR code...');
+          archiveAuthDir();
+          setTimeout(() => {
+            this.start().catch(e => console.error('Failed to restart after logout:', e));
+          }, 2000);
+        } else {
+          setTimeout(() => {
+            this.start().catch(e => console.error('Failed to reconnect after close:', e));
+          }, 4000);
         }
       } else if (connection === 'open') {
         this.status = 'connected';
@@ -632,16 +676,72 @@ class WhatsAppClient {
 
   async logout() {
     try {
+      console.log('🚪 Initiating WhatsApp logout and session reset...');
       if (this.socket) {
-        await this.socket.logout();
+        try {
+          await this.socket.logout();
+        } catch (err) {
+          console.warn('Socket logout warning:', err.message);
+        }
+        try {
+          this.socket.ev.removeAllListeners();
+          this.socket.end(undefined);
+        } catch (err) {}
+        this.socket = null;
       }
       this.status = 'disconnected';
       this.userInfo = null;
+      this.qrCodeRaw = null;
       this.qrCodeDataUrl = null;
       this.notifySubscribers('status_change', { status: this.status });
+
+      archiveAuthDir();
+
+      setTimeout(() => {
+        this.start().catch(e => console.error('Failed to restart after logout:', e));
+      }, 1500);
+
+      return { success: true, message: 'WhatsApp hesabı uğurla çıxarıldı və yeni QR kod hazırlanır.' };
     } catch (e) {
       console.error('Logout error:', e);
+      throw e;
     }
+  }
+
+  async resetSessionAndRestart() {
+    console.log('🔄 Manually resetting WhatsApp session and generating new QR code...');
+    if (this.socket) {
+      try {
+        this.socket.ev.removeAllListeners();
+        this.socket.end(undefined);
+      } catch (err) {}
+      this.socket = null;
+    }
+    this.status = 'disconnected';
+    this.userInfo = null;
+    this.qrCodeRaw = null;
+    this.qrCodeDataUrl = null;
+    this.notifySubscribers('status_change', { status: this.status });
+
+    archiveAuthDir();
+
+    await this.start();
+    return { success: true, message: 'Yeni QR kod hazırlanır...' };
+  }
+
+  async reconnect(cleanSession = false) {
+    if (cleanSession) {
+      return this.resetSessionAndRestart();
+    }
+    if (this.socket) {
+      try {
+        this.socket.ev.removeAllListeners();
+        this.socket.end(undefined);
+      } catch (e) {}
+      this.socket = null;
+    }
+    await this.start();
+    return { success: true, message: 'Qoşulur...' };
   }
 }
 

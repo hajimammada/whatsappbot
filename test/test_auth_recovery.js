@@ -107,7 +107,7 @@ async function runTests() {
       headers: { 'X-API-Key': adminPassword }
     });
     assert.strictEqual(res4.status, 200, 'Expected 200 OK for status with admin password');
-    assert.strictEqual(res4.data.version, 'v3.5.2');
+    assert.strictEqual(res4.data.version, 'v3.5.3');
     console.log(`   ✅ Passed: Status returned successfully (Version: ${res4.data.version})`);
 
     // Verify unauthenticated /api/health endpoint for 24/7 Keep-Alive
@@ -235,7 +235,29 @@ async function runTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-Key': adminPassword }
     }, { phoneNumber: existingLead.phoneNumber });
-    console.log('   ✅ Passed: Updating contact phone number functions accurately!');
+    // -------------------------------------------------------------
+    // Test 5f: Verify WhatsApp Session Management endpoints (/api/whatsapp/*)
+    // -------------------------------------------------------------
+    console.log('5️⃣f Testing WhatsApp session endpoints (/api/whatsapp/logout, /reset, /reconnect)...');
+    
+    // Unauthenticated requests should be blocked
+    const unauthLogout = await makeRequest({
+      hostname: 'localhost',
+      port: 3099,
+      path: '/api/whatsapp/logout',
+      method: 'POST'
+    });
+    assert.strictEqual(unauthLogout.status, 401, 'Expected 401 for unauthenticated logout');
+
+    const unauthReset = await makeRequest({
+      hostname: 'localhost',
+      port: 3099,
+      path: '/api/whatsapp/reset',
+      method: 'POST'
+    });
+    assert.strictEqual(unauthReset.status, 401, 'Expected 401 for unauthenticated reset');
+
+    console.log('   ✅ Passed: WhatsApp endpoints properly protected against unauthenticated requests.');
 
     // -------------------------------------------------------------
     // Test 6: Brute force protection on login attempts

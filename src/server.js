@@ -39,7 +39,7 @@ function getAppVersion() {
     // Git command not available
   }
 
-  return 'v3.5.2';
+  return 'v3.5.3';
 }
 
 function createServer() {
@@ -273,11 +273,21 @@ function createServer() {
     res.json(result);
   });
 
-  // Reconnect / Logout (Authenticated)
+  // Reconnect / Reset / Logout (Authenticated)
   app.post('/api/whatsapp/reconnect', requireAuth, async (req, res) => {
     try {
-      await waClient.start();
-      res.json({ success: true, message: 'Reconnecting...' });
+      const cleanSession = Boolean(req.body && req.body.cleanSession);
+      const result = await waClient.reconnect(cleanSession);
+      res.json(result || { success: true, message: 'Reconnecting...' });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/whatsapp/reset', requireAuth, async (req, res) => {
+    try {
+      const result = await waClient.resetSessionAndRestart();
+      res.json(result || { success: true, message: 'Session reset and new QR generated.' });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -285,8 +295,8 @@ function createServer() {
 
   app.post('/api/whatsapp/logout', requireAuth, async (req, res) => {
     try {
-      await waClient.logout();
-      res.json({ success: true, message: 'Logged out.' });
+      const result = await waClient.logout();
+      res.json(result || { success: true, message: 'Logged out.' });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

@@ -67,7 +67,11 @@ document.addEventListener('DOMContentLoaded', () => {
       msg_key_updating: "⏳ Açar yoxlanılır və yenilənir...",
       msg_key_required: "⚠️ Zəhmət olmasa yeni API açarı daxil edin.",
       show_key: "👁️ Göstər",
-      hide_key: "🙈 Gizlət"
+      hide_key: "🙈 Gizlət",
+      logout_wa: "🚪 WhatsApp-dan Çıxış",
+      confirm_wa_logout: "Bu WhatsApp nömrəsinin əlaqəsini kəsmək və çıxış etmək istədiyinizdən əminsiniz?",
+      btn_get_new_qr: "🔄 Yeni QR Kod Əldə Et",
+      wa_disconnected_hint: "Bağlantı kəsilib və ya telefon üzərindən əlaqə silinib."
     },
     ru: {
       brand_title: "whatsappbot.hajimammad.com",
@@ -130,7 +134,11 @@ document.addEventListener('DOMContentLoaded', () => {
       msg_key_updating: "⏳ Проверка и обновление ключа...",
       msg_key_required: "⚠️ Пожалуйста, введите новый API ключ.",
       show_key: "👁️ Показать",
-      hide_key: "🙈 Скрыть"
+      hide_key: "🙈 Скрыть",
+      logout_wa: "🚪 Отключить WhatsApp",
+      confirm_wa_logout: "Вы уверены, что хотите отключить этот номер WhatsApp?",
+      btn_get_new_qr: "🔄 Получить новый QR-код",
+      wa_disconnected_hint: "Подключение прервано или удалено на телефоне."
     },
     en: {
       brand_title: "whatsappbot.hajimammad.com",
@@ -193,7 +201,11 @@ document.addEventListener('DOMContentLoaded', () => {
       msg_key_updating: "⏳ Validating and updating key...",
       msg_key_required: "⚠️ Please enter a new API key.",
       show_key: "👁️ Show",
-      hide_key: "🙈 Hide"
+      hide_key: "🙈 Hide",
+      logout_wa: "🚪 Disconnect WhatsApp",
+      confirm_wa_logout: "Are you sure you want to disconnect this WhatsApp account?",
+      btn_get_new_qr: "🔄 Get New QR Code",
+      wa_disconnected_hint: "Connection disconnected or unlinked from phone."
     }
   };
 
@@ -276,6 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const userDisplayName = document.getElementById('user-display-name');
   const userDisplayJid = document.getElementById('user-display-jid');
   const waStateBadge = document.getElementById('wa-state-badge');
+  const btnLogout = document.getElementById('btn-logout');
 
   const statTotalMessages = document.getElementById('stat-total-messages');
   const statLeadsCount = document.getElementById('stat-leads-count');
@@ -687,7 +700,31 @@ document.addEventListener('DOMContentLoaded', () => {
       waStateBadge.className = 'badge badge-disconnected';
       qrContainer.classList.remove('hidden');
       connectedInfo.classList.add('hidden');
-      qrImageWrapper.innerHTML = `<p style="color: var(--danger-color); padding: 20px;">${dict.status_disconnected}.</p>`;
+      qrImageWrapper.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 100%; padding: 12px; text-align: center;">
+          <div style="font-size: 24px;">⚠️</div>
+          <p style="color: var(--danger-color); font-weight: 700; font-size: 14px; margin: 0;">${dict.status_disconnected}</p>
+          <p style="color: #64748b; font-size: 11px; margin: 0; line-height: 1.3;">${dict.wa_disconnected_hint || 'Bağlantı kəsilib və ya telefon üzərindən əlaqə silinib.'}</p>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-fresh-qr" style="font-size: 11px; padding: 7px 12px; font-weight: 600; width: 100%; margin-top: 6px;">
+            ${dict.btn_get_new_qr || '🔄 Yeni QR Kod Əldə Et'}
+          </button>
+        </div>
+      `;
+      const btnFreshQr = document.getElementById('btn-fresh-qr');
+      if (btnFreshQr) {
+        btnFreshQr.addEventListener('click', async () => {
+          btnFreshQr.disabled = true;
+          btnFreshQr.textContent = '...';
+          qrImageWrapper.innerHTML = `<div class="spinner"></div><p class="qr-hint">${dict.status_connecting}</p>`;
+          try {
+            await authFetch('/api/whatsapp/reset', { method: 'POST' });
+          } catch (e) {
+            console.error('Error resetting WhatsApp session:', e);
+            btnFreshQr.disabled = false;
+            btnFreshQr.textContent = dict.btn_get_new_qr || '🔄 Yeni QR Kod Əldə Et';
+          }
+        });
+      }
     }
 
     // Populate live messages feed from recent messages if currently empty
@@ -1134,11 +1171,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  if (btnLogout) {
+    btnLogout.addEventListener('click', async () => {
+      const dict = I18N[currentLang] || I18N.az;
+      if (!confirm(dict.confirm_wa_logout || 'WhatsApp nömrəsinin əlaqəsini kəsmək istəyirsiniz?')) {
+        return;
+      }
+      btnLogout.disabled = true;
+      btnLogout.textContent = '...';
+      try {
+        const res = await authFetch('/api/whatsapp/logout', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Çıxış xətası');
+        await fetchStatus();
+      } catch (err) {
+        alert('Xəta: ' + err.message);
+      } finally {
+        setTimeout(() => {
+          if (btnLogout) {
+            btnLogout.disabled = false;
+            btnLogout.textContent = dict.logout_wa || '🚪 WhatsApp-dan Çıxış';
+          }
+        }, 3000);
+      }
+    });
+  }
+
   btnReconnect.addEventListener('click', async () => {
     btnReconnect.disabled = true;
     btnReconnect.textContent = '...';
     try {
       await authFetch('/api/whatsapp/reconnect', { method: 'POST' });
+      await fetchStatus();
     } catch (e) {
       alert('Error: ' + e.message);
     } finally {
