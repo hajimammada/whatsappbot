@@ -107,7 +107,7 @@ async function runTests() {
       headers: { 'X-API-Key': adminPassword }
     });
     assert.strictEqual(res4.status, 200, 'Expected 200 OK for status with admin password');
-    assert.strictEqual(res4.data.version, 'v3.5.3');
+    assert.strictEqual(res4.data.version, 'v3.5.4');
     console.log(`   ✅ Passed: Status returned successfully (Version: ${res4.data.version})`);
 
     // Verify unauthenticated /api/health endpoint for 24/7 Keep-Alive
@@ -172,16 +172,17 @@ async function runTests() {
     // -------------------------------------------------------------
     console.log('5️⃣d Testing pause and resume bot endpoints for LID & Phone...');
     const testLid = '104247563690150';
-    // Pause bot for testLid
-    const pauseRes = await makeRequest({
+    // Test indefinite manual pause
+    const pauseManualRes = await makeRequest({
       hostname: 'localhost',
       port: 3099,
       path: `/api/chat/${testLid}/pause`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-Key': adminPassword }
-    }, { minutes: 60 });
-    assert.strictEqual(pauseRes.status, 200);
-    assert.strictEqual(pauseRes.data.isPaused, true);
+    }, { isManual: true });
+    assert.strictEqual(pauseManualRes.status, 200);
+    assert.strictEqual(pauseManualRes.data.isPaused, true);
+    assert.strictEqual(pauseManualRes.data.isManual, true);
 
     const statusCheck1 = await makeRequest({
       hostname: 'localhost',
@@ -191,6 +192,7 @@ async function runTests() {
       headers: { 'X-API-Key': adminPassword }
     });
     assert.ok(statusCheck1.data[testLid]?.isPaused, 'Expected testLid to be paused');
+    assert.strictEqual(statusCheck1.data[testLid]?.isManual, true);
 
     // Resume bot for testLid (Tests the bug fix!)
     const resumeRes = await makeRequest({

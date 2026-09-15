@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tbl_action: "Əlaqə",
       no_leads: "Hələ qeydə alınmış alıcı yoxdur.",
       btn_resume: "▶️ Aktivləşdir",
-      btn_pause: "⏸️ Dayandır (30d)",
+      btn_pause: "⏸️ Dayandır",
       bot_active: "🟢 Aktivdir",
       bot_paused: "⏸️ Dayandırılıb",
       docs_header: "Sənədlər",
@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tbl_action: "Действие",
       no_leads: "Пока нет зафиксированных клиентов.",
       btn_resume: "▶️ Включить",
-      btn_pause: "⏸️ Пауза (30м)",
+      btn_pause: "⏸️ Пауза",
       bot_active: "🟢 Активен",
       bot_paused: "⏸️ Приостановлен",
       docs_header: "Документы",
@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tbl_action: "Action",
       no_leads: "No customer leads recorded yet.",
       btn_resume: "▶️ Resume Bot",
-      btn_pause: "⏸️ Pause (30m)",
+      btn_pause: "⏸️ Pause",
       bot_active: "🟢 Active",
       bot_paused: "⏸️ Paused",
       docs_header: "Documents",
@@ -984,13 +984,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const chatStatus = chatStatuses[l.phoneNumber] || (l.lid && chatStatuses[l.lid]);
       const isPaused = chatStatus && chatStatus.isPaused;
-      const remainingMins = chatStatus?.remainingMinutes || 30;
-      const remainingFormatted = formatRemainingTime(remainingMins);
+      const isManual = chatStatus && (chatStatus.isManual || !chatStatus.remainingMinutes);
+      const remainingMins = chatStatus?.remainingMinutes;
+      const remainingFormatted = remainingMins ? formatRemainingTime(remainingMins) : '';
 
       const targetPhone = l.phoneNumber || l.lid;
+      const badgeText = (isManual || !remainingMins)
+        ? dict.bot_paused
+        : `${dict.bot_paused} (${remainingFormatted})`;
+
       const botControlHtml = isPaused
         ? `<div class="bot-control-cell">
-             <span class="badge-lead badge-paused">${dict.bot_paused} (${remainingFormatted})</span>
+             <span class="badge-lead badge-paused">${badgeText}</span>
              <button class="btn btn-primary btn-xs btn-resume-bot" data-phone="${targetPhone}">${dict.btn_resume}</button>
            </div>`
         : `<div class="bot-control-cell">
@@ -1070,19 +1075,24 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.disabled = true;
         btn.textContent = '...';
 
-        // Optimistic UI state update
+        // Optimistic UI state update: indefinite manual pause
         if (!chatStatuses[phone]) chatStatuses[phone] = {};
         chatStatuses[phone].isPaused = true;
-        chatStatuses[phone].remainingMinutes = 30;
+        chatStatuses[phone].isManual = true;
+        chatStatuses[phone].remainingMinutes = null;
 
         try {
           const res = await authFetch(`/api/chat/${encodeURIComponent(phone)}/pause`, {
             method: 'POST',
-            body: JSON.stringify({ minutes: 30 })
+            body: JSON.stringify({ isManual: true })
           });
           const data = await res.json();
           if (data && data.phone) {
-            chatStatuses[data.phone] = { isPaused: true, remainingMinutes: data.remainingMinutes || 30 };
+            chatStatuses[data.phone] = {
+              isPaused: true,
+              isManual: data.isManual !== false,
+              remainingMinutes: data.remainingMinutes || null
+            };
           }
           await loadLeads();
         } catch (e) {

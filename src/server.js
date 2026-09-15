@@ -39,7 +39,7 @@ function getAppVersion() {
     // Git command not available
   }
 
-  return 'v3.5.3';
+  return 'v3.5.4';
 }
 
 function createServer() {
@@ -268,8 +268,11 @@ function createServer() {
   });
 
   app.post('/api/chat/:phone/pause', requireAuth, (req, res) => {
-    const minutes = req.body.minutes || 300;
-    const result = waClient.pauseBotForChat(req.params.phone, minutes);
+    const isManualReq = req.body && req.body.isManual;
+    const minutesReq = req.body && req.body.minutes;
+    const isManual = isManualReq !== undefined ? Boolean(isManualReq) : (!minutesReq || Number(minutesReq) <= 0);
+    const minutes = isManual ? null : Number(minutesReq);
+    const result = waClient.pauseBotForChat(req.params.phone, minutes, isManual);
     res.json(result);
   });
 

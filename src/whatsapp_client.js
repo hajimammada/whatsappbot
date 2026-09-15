@@ -220,47 +220,65 @@ class WhatsAppClient {
     return { success: true, phone: clean, isPaused: false };
   }
 
-  pauseBotForChat(phoneOrJid, minutes = 300) {
+  pauseBotForChat(phoneOrJid, minutes = null, isManual = null) {
     const raw = String(phoneOrJid || '').trim();
     const clean = raw.replace(/@.+/, '').replace(/\D/g, '');
     const now = Date.now();
     const mappedPhone = this.lidToPhoneMap.get(clean);
     const mappedLid = this.phoneToLidMap.get(clean);
 
-    this.humanTakeovers.set(raw, now);
-    this.humanTakeovers.set(clean, now);
-    this.humanTakeovers.set(`${clean}@s.whatsapp.net`, now);
-    this.humanTakeovers.set(`${clean}@lid`, now);
+    // If isManual is explicitly boolean, use it.
+    // Otherwise, if minutes is null/undefined/<=0, it's manual indefinite pause.
+    const isMan = isManual !== null ? Boolean(isManual) : (!minutes || Number(minutes) <= 0);
+    const pauseRecord = {
+      timestamp: now,
+      isManual: isMan,
+      minutes: isMan ? null : Number(minutes)
+    };
 
+    const keys = [
+      raw,
+      clean,
+      `${clean}@s.whatsapp.net`,
+      `${clean}@lid`
+    ];
     if (mappedPhone) {
-      this.humanTakeovers.set(mappedPhone, now);
-      this.humanTakeovers.set(`${mappedPhone}@s.whatsapp.net`, now);
+      keys.push(mappedPhone, `${mappedPhone}@s.whatsapp.net`);
     }
     if (mappedLid) {
-      this.humanTakeovers.set(mappedLid, now);
-      this.humanTakeovers.set(`${mappedLid}@lid`, now);
+      keys.push(mappedLid, `${mappedLid}@lid`);
     }
 
-    console.log(`⏸️ +${clean} üçün bot panel üzərindən ${minutes} dəqiqəlik (${Math.round(minutes/60)} saatlıq) dayandırıldı.`);
-    this.notifySubscribers('chat_status_updated', {
+    for (const k of keys) {
+      this.humanTakeovers.set(k, pauseRecord);
+    }
+
+    if (isMan) {
+      console.log(`⏸️ +${clean} üçün bot panel üzərindən tamamilə (qeyri-müəyyən müddətə) dayandırıldı.`);
+    } else {
+      console.log(`⏸️ +${clean} üçün bot ${minutes} dəqiqəlik dayandırıldı.`);
+    }
+
+    const payload = {
       phone: clean,
       isPaused: true,
-      remainingMinutes: minutes
-    });
+      isManual: isMan,
+      remainingMinutes: isMan ? null : Number(minutes)
+    };
+
+    this.notifySubscribers('chat_status_updated', payload);
     if (mappedPhone && mappedPhone !== clean) {
-      this.notifySubscribers('chat_status_updated', {
-        phone: mappedPhone,
-        isPaused: true,
-        remainingMinutes: minutes
-      });
+      this.notifySubscribers('chat_status_updated', { ...payload, phone: mappedPhone });
     }
-    return { success: true, phone: clean, isPaused: true, remainingMinutes: minutes };
+    if (mappedLid && mappedLid !== clean) {
+      this.notifySubscribers('chat_status_updated', { ...payload, phone: mappedLid });
+    }
+    return { success: true, ...payload };
   }
 
   isChatPaused(remoteJid) {
     const settings = getAgentSettings();
     const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 30;
-    if (takeoverMinutes <= 0) return false;
 
     const raw = String(remoteJid || '');
     const clean = raw.replace(/@.+/, '').replace(/\D/g, '');
@@ -281,11 +299,23 @@ class WhatsAppClient {
     }
 
     const now = Date.now();
-    const windowMs = takeoverMinutes * 60 * 1000;
     for (const k of checkKeys) {
-      const ts = this.humanTakeovers.get(k);
-      if (ts && (now - ts) < windowMs) {
-        return true;
+      const rec = this.humanTakeovers.get(k);
+      if (!rec) continue;
+
+      if (typeof rec === 'number') {
+        const windowMs = takeoverMinutes * 60 * 1000;
+        if ((now - rec) < windowMs) return true;
+      } else if (rec && typeof rec === 'object') {
+        if (rec.isManual) {
+          // Indefinite manual pause: stays paused until explicitly resumed
+          return true;
+        }
+        const limitMins = rec.minutes || takeoverMinutes;
+        const windowMs = limitMins * 60 * 1000;
+        if ((now - rec.timestamp) < windowMs) {
+          return true;
+        }
       }
     }
     return false;
@@ -293,18 +323,48 @@ class WhatsAppClient {
 
   getAllChatStatuses() {
     const settings = getAgentSettings();
-    const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 300;
+    const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 30;
     const now = Date.now();
     const result = {};
 
-    for (const [jid, timestamp] of this.humanTakeovers.entries()) {
-      const elapsedMs = now - timestamp;
-      const totalMs = takeoverMinutes * 60 * 1000;
-      if (elapsedMs < totalMs) {
-        const remainingMinutes = Math.ceil((totalMs - elapsedMs) / 60000);
+    for (const [jid, rec] of this.humanTakeovers.entries()) {
+      let isPaused = false;
+      let isManual = false;
+      let remainingMinutes = null;
+      let timestamp = now;
+
+      if (typeof rec === 'number') {
+        timestamp = rec;
+        const elapsedMs = now - rec;
+        const totalMs = takeoverMinutes * 60 * 1000;
+        if (elapsedMs < totalMs) {
+          isPaused = true;
+          isManual = false;
+          remainingMinutes = Math.ceil((totalMs - elapsedMs) / 60000);
+        }
+      } else if (rec && typeof rec === 'object') {
+        timestamp = rec.timestamp;
+        if (rec.isManual) {
+          isPaused = true;
+          isManual = true;
+          remainingMinutes = null;
+        } else {
+          const limitMins = rec.minutes || takeoverMinutes;
+          const elapsedMs = now - rec.timestamp;
+          const totalMs = limitMins * 60 * 1000;
+          if (elapsedMs < totalMs) {
+            isPaused = true;
+            isManual = false;
+            remainingMinutes = Math.ceil((totalMs - elapsedMs) / 60000);
+          }
+        }
+      }
+
+      if (isPaused) {
         const clean = jid.replace(/@.+/, '').replace(/\D/g, '');
         const statusObj = {
           isPaused: true,
+          isManual: isManual,
           remainingMinutes: remainingMinutes,
           pausedAt: new Date(timestamp).toISOString()
         };
@@ -540,8 +600,11 @@ class WhatsAppClient {
           const settings = getAgentSettings();
           const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 30;
           if (takeoverMinutes > 0) {
-            this.pauseBotForChat(remoteJid, takeoverMinutes);
-            console.log(`👤 Siz +${senderPhone} ilə şəxsən söhbətə daxil oldunuz. Bot bu çatda ${takeoverMinutes} dəqiqə avtomatik susacaq.`);
+            const currentRec = this.humanTakeovers.get(remoteJid);
+            if (!currentRec?.isManual) {
+              this.pauseBotForChat(remoteJid, takeoverMinutes, false);
+              console.log(`👤 Siz +${senderPhone} ilə şəxsən söhbətə daxil oldunuz. Bot bu çatda ${takeoverMinutes} dəqiqə avtomatik susacaq.`);
+            }
           }
 
           // Record owner's outgoing message in recentMessages and leads table
