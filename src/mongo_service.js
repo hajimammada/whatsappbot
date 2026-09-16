@@ -25,7 +25,7 @@ const DEFAULT_MONGO_URI = 'mongodb+srv://aliyevhack_db_user:3jGATmdfGpTO8LSI@clu
 
 class MongoPersistenceService {
   constructor() {
-    this.uri = process.env.MONGODB_URI || DEFAULT_MONGO_URI;
+    this.uri = process.env.MONGODB_URI || process.env.MONGO_URI || DEFAULT_MONGO_URI;
     this.client = null;
     this.db = null;
     this.isConnected = false;
