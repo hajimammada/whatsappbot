@@ -21,7 +21,7 @@
         <div class="brand-text">
           <h1 class="brand-title">
             <span class="brand-name">whatsappbot.hajimammad.com</span>
-            <span class="brand-version" id="app-version">v3.10.0</span>
+            <span class="brand-version" id="app-version">v3.10.1</span>
           </h1>
         </div>
       </div>
@@ -141,35 +141,32 @@
       </div>
     </section>
 
-    <!-- Tab 2: Omnichannel Inbox & Messages -->
+    <!-- Tab 2: Omnichannel Live Chat Inbox -->
     <section class="tab-content" id="tab-leads">
       <div class="card glass-card inbox-main-card">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <h3 data-i18n="tab_messages">Mesajlar / Inbox</h3>
-            <div class="inbox-view-toggle">
-              <button type="button" class="btn btn-xs btn-primary active" id="btn-view-chat" title="Canlı Çat">💬 Çat</button>
-              <button type="button" class="btn btn-xs btn-secondary" id="btn-view-table" title="Cədvəl Görünüşü">📋 Cədvəl</button>
-            </div>
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <button class="btn btn-secondary btn-sm" id="btn-refresh-leads">🔄</button>
-          </div>
-        </div>
-
-        <!-- 1. Interactive 2-Panel Live Chat Inbox View -->
+        <!-- Interactive 2-Panel Live Chat Inbox View -->
         <div class="inbox-container" id="inbox-container">
           <!-- Left: Conversation List -->
           <div class="inbox-sidebar">
+            <div class="inbox-sidebar-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="inbox-sidebar-title">💬 Söhbətlər</span>
+                <span class="tab-badge" id="leads-count">0</span>
+              </div>
+              <button type="button" class="btn btn-secondary btn-xs" id="btn-refresh-leads" title="Yenilə">🔄 Yenilə</button>
+            </div>
+
             <div class="inbox-search-box">
               <input type="text" id="inbox-search-input" class="form-input" placeholder="🔍 Alıcı və ya mesaj axtar...">
             </div>
+
             <div class="inbox-channel-tabs">
               <button type="button" class="channel-tab active" data-channel="all">Hamısı</button>
               <button type="button" class="channel-tab" data-channel="whatsapp">🟢 WhatsApp</button>
               <button type="button" class="channel-tab" data-channel="instagram">📸 Instagram</button>
               <button type="button" class="channel-tab" data-channel="facebook">🔵 Facebook</button>
             </div>
+
             <div class="inbox-conv-list" id="inbox-conv-list">
               <div class="empty-inbox-placeholder">Hələ söhbət yoxdur</div>
             </div>
@@ -186,6 +183,7 @@
             <div class="inbox-active-chat hidden" id="inbox-active-chat">
               <div class="inbox-chat-header">
                 <div class="chat-header-user">
+                  <button type="button" class="btn-back-conv-list" id="btn-back-to-conv-list" title="Söhbətlərə qayıt">←</button>
                   <div class="chat-user-avatar" id="active-chat-avatar">👤</div>
                   <div>
                     <h4 id="active-chat-name">Alıcı Adı</h4>
@@ -193,6 +191,7 @@
                       <span id="active-chat-platform-badge" class="badge-platform-sm">🟢 WhatsApp</span>
                       <span id="active-chat-phone" class="font-mono">+994...</span>
                       <button type="button" class="btn-link btn-xs" id="btn-edit-active-phone" title="Nömrəni düzəlt">✏️</button>
+                      <span class="chat-header-tags" id="active-chat-tags"></span>
                     </div>
                   </div>
                 </div>
@@ -200,7 +199,7 @@
                   <div id="active-chat-bot-control">
                     <!-- Dynamic Pause / Resume Button -->
                   </div>
-                  <a href="#" target="_blank" class="btn btn-secondary btn-xs" id="active-chat-external-link" title="Kənar proqramda aç">↗️</a>
+                  <a href="#" target="_blank" class="btn btn-secondary btn-xs" id="active-chat-external-link" title="Kənar proqramda aç">↗️ WhatsApp</a>
                 </div>
               </div>
 
@@ -223,30 +222,6 @@
               </div>
             </div>
           </div>
-        </div>
-
-        <!-- 2. Classic Table View (Toggleable) -->
-        <div class="leads-table-wrapper hidden" id="leads-table-wrapper">
-          <table class="leads-table" id="leads-table">
-            <thead>
-              <tr>
-                <th data-i18n="tbl_contact">Alıcı / Nömrə</th>
-                <th>Kanal</th>
-                <th data-i18n="tbl_type">Müraciət</th>
-                <th data-i18n="tbl_interest">Maraq</th>
-                <th data-i18n="tbl_time">İstədiyi Vaxt</th>
-                <th data-i18n="tbl_status">Bot Statusu</th>
-                <th data-i18n="tbl_last_msg">Son Mesaj</th>
-                <th data-i18n="tbl_date">Tarix</th>
-                <th data-i18n="tbl_action">Əlaqə</th>
-              </tr>
-            </thead>
-            <tbody id="leads-tbody">
-              <tr>
-                <td colspan="9" class="text-center" data-i18n="no_leads">Hələ qeydə alınmış alıcı yoxdur.</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </div>
     </section>

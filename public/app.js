@@ -348,15 +348,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const statViewingsCount = document.getElementById('stat-viewings-count');
   const messagesFeed = document.getElementById('messages-feed');
 
-  const leadsTbody = document.getElementById('leads-tbody');
   const leadsBadgeCount = document.getElementById('leads-count');
   const btnRefreshLeads = document.getElementById('btn-refresh-leads');
 
   // Omnichannel Live Chat Inbox Elements
-  const btnViewChat = document.getElementById('btn-view-chat');
-  const btnViewTable = document.getElementById('btn-view-table');
   const inboxContainer = document.getElementById('inbox-container');
-  const leadsTableWrapper = document.getElementById('leads-table-wrapper');
+  const btnBackToConvList = document.getElementById('btn-back-to-conv-list');
   const inboxSearchInput = document.getElementById('inbox-search-input');
   const inboxChannelTabs = document.querySelectorAll('.channel-tab');
   const inboxConvList = document.getElementById('inbox-conv-list');
@@ -1086,16 +1083,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const leads = await leadsRes.json();
       chatStatuses = await statusRes.json();
       currentLeads = Array.isArray(leads) ? leads : [];
-      renderLeadsTable(currentLeads);
+      updateLeadStats();
       renderInboxConversations();
     } catch (err) {
       console.error('Error fetching leads:', err);
     }
   }
 
-  function renderLeadsTable(leads) {
-    statLeadsCount.textContent = leads.length;
-    leadsBadgeCount.textContent = leads.length;
+  function updateLeadStats() {
+    const leads = currentLeads || [];
+    if (statLeadsCount) statLeadsCount.textContent = leads.length;
+    if (leadsBadgeCount) leadsBadgeCount.textContent = leads.length;
 
     let viewingsCount = 0;
     leads.forEach(l => {
@@ -1103,207 +1101,7 @@ document.addEventListener('DOMContentLoaded', () => {
         viewingsCount++;
       }
     });
-    statViewingsCount.textContent = viewingsCount;
-
-    const dict = I18N[currentLang];
-
-    if (!leads || leads.length === 0) {
-      leadsTbody.innerHTML = `<tr><td colspan="9" class="text-center" style="padding: 24px; color: var(--text-muted)">${dict.no_leads}</td></tr>`;
-      return;
-    }
-
-    function formatRemainingTime(mins) {
-      if (!mins || mins <= 0) return '0m';
-      if (mins < 60) return `${mins}m`;
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return m > 0 ? `${h}h ${m}m` : `${h}h`;
-    }
-
-    leadsTbody.innerHTML = leads.map(l => {
-      const isHigh = l.interestLevel === 'high';
-      const isViewing = l.status === 'viewing_requested';
-      const aptTime = (l.viewingAppointments && l.viewingAppointments[0]?.preferred_time) || '-';
-      const contactDate = l.lastContact || l.firstContact || new Date().toISOString();
-      const dateFormatted = formatDateTime(contactDate, currentLang);
-
-      const chatStatus = chatStatuses[l.phoneNumber] || (l.lid && chatStatuses[l.lid]);
-      const isPaused = chatStatus && chatStatus.isPaused;
-      const isManual = chatStatus && (chatStatus.isManual || !chatStatus.remainingMinutes);
-      const remainingMins = chatStatus?.remainingMinutes;
-      const remainingFormatted = remainingMins ? formatRemainingTime(remainingMins) : '';
-
-      const targetPhone = l.phoneNumber || l.lid || l.platformId || '';
-      const badgeText = (isManual || !remainingMins)
-        ? dict.bot_paused
-        : `${dict.bot_paused} (${remainingFormatted})`;
-
-      const botControlHtml = isPaused
-        ? `<div class="bot-control-cell">
-             <span class="badge-lead badge-paused">${badgeText}</span>
-             <button class="btn btn-primary btn-xs btn-resume-bot" data-phone="${targetPhone}">${dict.btn_resume}</button>
-           </div>`
-        : `<div class="bot-control-cell">
-             <span class="badge-lead badge-bot-active">${dict.bot_active}</span>
-             <button class="btn btn-secondary btn-xs btn-pause-bot" data-phone="${targetPhone}">${dict.btn_pause}</button>
-           </div>`;
-
-      const msgCountBadge = (l.messages && l.messages.length > 1) 
-        ? `<span style="display: inline-block; font-size: 10px; background: rgba(59,130,246,0.2); color: var(--accent-blue); padding: 1px 5px; border-radius: 4px; margin-left: 4px;">${l.messages.length}</span>` 
-        : '';
-
-      const isLikelyLid = (l.lid && l.lid === l.phoneNumber) || (l.phoneNumber && l.phoneNumber.length >= 14 && !l.phoneNumber.startsWith('994') && !l.phoneNumber.startsWith('90') && !l.phoneNumber.startsWith('7') && !l.phoneNumber.startsWith('1'));
-      const plat = getPlatformMeta(l.platform);
-
-      return `
-        <tr>
-          <td>
-            <strong>${escapeHtml(l.name || 'User')}</strong>${msgCountBadge}<br>
-            <span style="font-family: var(--font-mono); color: var(--accent-blue);">${escapeHtml(targetPhone ? (targetPhone.startsWith('+') ? targetPhone : '+' + targetPhone) : '')}</span>
-            ${isLikelyLid ? '<span class="badge badge-warning" style="font-size: 9px; padding: 1px 4px; margin-left: 3px;" title="WhatsApp Daxili İdentifikatoru (LID)">ID</span>' : ''}
-            <button class="btn btn-link btn-xs btn-edit-lead-phone" data-id="${l.id}" data-phone="${escapeHtml(l.phoneNumber)}" title="Telefon nömrəsini düzəlt / Daxil et" style="cursor: pointer; padding: 0 4px; font-size: 12px; text-decoration: none; border: none; background: transparent;">✏️</button>
-          </td>
-          <td>
-            <span class="badge-platform-sm">${plat.badge}</span>
-          </td>
-          <td>
-            <span class="badge-lead ${isViewing ? 'badge-status-viewing' : ''}">
-              ${isViewing ? '🏡 Viewing' : '💬 Chat'}
-            </span>
-          </td>
-          <td>
-            <span class="badge-lead ${isHigh ? 'badge-high' : 'badge-medium'}">
-              ${isHigh ? '🔥 High' : 'Normal'}
-            </span>
-          </td>
-          <td><strong>${escapeHtml(aptTime)}</strong></td>
-          <td>${botControlHtml}</td>
-          <td style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(l.lastMessage || '')}">
-            "${escapeHtml(l.lastMessage || '')}"
-          </td>
-          <td style="font-size: 11px; color: var(--text-muted);">${dateFormatted}</td>
-          <td>
-            ${(l.platform || 'whatsapp') === 'whatsapp'
-              ? `<a href="https://wa.me/${l.phoneNumber}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration: none;">WhatsApp</a>`
-              : `<button type="button" class="btn btn-secondary btn-sm btn-open-inbox-lead" data-id="${l.id}">💬 Inbox</button>`}
-          </td>
-        </tr>
-      `;
-    }).join('');
-
-    // Click handlers for Resume & Pause
-    document.querySelectorAll('.btn-resume-bot').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        const phone = btn.getAttribute('data-phone');
-        btn.disabled = true;
-        btn.textContent = '...';
-
-        // Optimistic UI state update so user sees instant feedback
-        if (chatStatuses[phone]) {
-          chatStatuses[phone].isPaused = false;
-          chatStatuses[phone].remainingMinutes = 0;
-        }
-
-        try {
-          const res = await authFetch(`/api/chat/${encodeURIComponent(phone)}/resume`, { method: 'POST' });
-          const data = await res.json();
-          if (data && data.phone) {
-            chatStatuses[data.phone] = { isPaused: false, remainingMinutes: 0 };
-          }
-          await loadLeads();
-        } catch (e) {
-          console.error('Error resuming bot:', e);
-          await loadLeads();
-        }
-      });
-    });
-
-    document.querySelectorAll('.btn-pause-bot').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        const phone = btn.getAttribute('data-phone');
-        btn.disabled = true;
-        btn.textContent = '...';
-
-        // Optimistic UI state update: indefinite manual pause
-        if (!chatStatuses[phone]) chatStatuses[phone] = {};
-        chatStatuses[phone].isPaused = true;
-        chatStatuses[phone].isManual = true;
-        chatStatuses[phone].remainingMinutes = null;
-
-        try {
-          const res = await authFetch(`/api/chat/${encodeURIComponent(phone)}/pause`, {
-            method: 'POST',
-            body: JSON.stringify({ isManual: true })
-          });
-          const data = await res.json();
-          if (data && data.phone) {
-            chatStatuses[data.phone] = {
-              isPaused: true,
-              isManual: data.isManual !== false,
-              remainingMinutes: data.remainingMinutes || null
-            };
-          }
-          await loadLeads();
-        } catch (e) {
-          console.error('Error pausing bot:', e);
-          await loadLeads();
-        }
-      });
-    });
-
-    // Edit contact phone number handler
-    document.querySelectorAll('.btn-edit-lead-phone').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const leadId = btn.getAttribute('data-id');
-        const currentPhone = btn.getAttribute('data-phone') || '';
-
-        const promptText = currentLang === 'en'
-          ? 'Enter real international phone number (e.g. 994501234567):'
-          : (currentLang === 'ru'
-            ? 'Введите реальный международный номер телефона (напр: 994501234567):'
-            : 'Müştərinin real beynəlxalq telefon nömrəsini daxil edin (məs: 994501234567):');
-
-        const defaultVal = (currentPhone.length >= 14 || currentPhone.startsWith('104')) ? '' : currentPhone;
-        const input = prompt(promptText, defaultVal);
-        if (!input || !input.trim()) return;
-
-        const cleanPhone = input.trim().replace(/\D/g, '');
-        if (cleanPhone.length < 8) {
-          alert(currentLang === 'en' ? 'Please enter a valid phone number.' : 'Zəhmət olmasa düzgün telefon nömrəsi daxil edin.');
-          return;
-        }
-
-        btn.textContent = '...';
-        try {
-          const res = await authFetch(`/api/leads/${encodeURIComponent(leadId)}/phone`, {
-            method: 'POST',
-            body: JSON.stringify({ phoneNumber: cleanPhone })
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            throw new Error(data.error || 'Nömrə yenilənmədi');
-          }
-          await loadLeads();
-        } catch (err) {
-          alert('Xəta: ' + err.message);
-          btn.textContent = '✏️';
-        }
-      });
-    });
-
-    // Open Inbox from Table handler
-    document.querySelectorAll('.btn-open-inbox-lead').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        const leadId = btn.getAttribute('data-id');
-        if (btnViewChat) btnViewChat.click();
-        selectConversation(leadId);
-      });
-    });
+    if (statViewingsCount) statViewingsCount.textContent = viewingsCount;
   }
 
   // -----------------------------------------------------------------
@@ -1375,6 +1173,22 @@ document.addEventListener('DOMContentLoaded', () => {
       const isPaused = chatStatus && chatStatus.isPaused;
       const initial = (l.name && l.name.charAt(0)) ? l.name.charAt(0).toUpperCase() : '👤';
       const timeStr = l.lastContact ? formatRelativeTime(l.lastContact) : '';
+      const isHigh = l.interestLevel === 'high';
+      const isViewing = l.status === 'viewing_requested' || (l.viewingAppointments && l.viewingAppointments.length > 0);
+      const aptTime = (l.viewingAppointments && l.viewingAppointments[0]?.preferred_time) || '';
+      const msgCount = (l.messages && l.messages.length) || 0;
+      const targetPhone = l.phoneNumber || l.lid || l.platformId || '';
+      const formattedPhone = targetPhone ? (targetPhone.startsWith('+') ? targetPhone : '+' + targetPhone) : '';
+
+      const viewingBadge = isViewing
+        ? `<span class="conv-tag conv-tag-viewing" title="Görüş: ${escapeHtml(aptTime || '')}">🏡 ${escapeHtml(aptTime || 'Görüş')}</span>`
+        : '';
+      const highBadge = isHigh
+        ? `<span class="conv-tag conv-tag-high" title="Yüksək Maraq">🔥 Yüksək</span>`
+        : '';
+      const msgCountBadge = msgCount > 1
+        ? `<span class="conv-msg-count">${msgCount}</span>`
+        : '';
 
       return `
         <div class="inbox-conv-item ${isSelected ? 'active' : ''}" data-lead-id="${l.id}">
@@ -1387,9 +1201,17 @@ document.addEventListener('DOMContentLoaded', () => {
               <span class="conv-name" title="${escapeHtml(l.name || 'Alıcı')}">${escapeHtml(l.name || 'Alıcı')}</span>
               <span class="conv-time">${timeStr}</span>
             </div>
+            <div class="conv-sub-row">
+              <span class="conv-phone font-mono">${escapeHtml(formattedPhone)}</span>
+              <div class="conv-tags">
+                ${viewingBadge}
+                ${highBadge}
+                ${msgCountBadge}
+              </div>
+            </div>
             <div class="conv-bot-row">
               <span class="conv-preview" title="${escapeHtml(l.lastMessage || '')}">${escapeHtml(l.lastMessage || '...')}</span>
-              <span class="conv-bot-pill ${isPaused ? 'conv-bot-paused' : 'conv-bot-active'}">
+              <span class="conv-bot-pill ${isPaused ? 'conv-bot-paused' : 'conv-bot-active'}" title="${isPaused ? 'Bot dayandırılıb' : 'Bot aktivdir'}">
                 ${isPaused ? '⏸️' : '🤖'}
               </span>
             </div>
@@ -1414,6 +1236,9 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedInboxLeadId = leadId;
     renderInboxConversations();
     renderActiveChat();
+    if (inboxContainer) {
+      inboxContainer.classList.add('mobile-chat-open');
+    }
     if (inboxReplyInput) {
       inboxReplyInput.focus();
     }
@@ -1437,6 +1262,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (activeChatName) activeChatName.textContent = lead.name || 'Alıcı';
     if (activeChatPlatformBadge) activeChatPlatformBadge.textContent = plat.badge;
     if (activeChatPhone) activeChatPhone.textContent = targetPhone ? (targetPhone.startsWith('+') ? targetPhone : `+${targetPhone}`) : '';
+
+    const activeChatTags = document.getElementById('active-chat-tags');
+    if (activeChatTags) {
+      const isHigh = lead.interestLevel === 'high';
+      const isViewing = lead.status === 'viewing_requested' || (lead.viewingAppointments && lead.viewingAppointments.length > 0);
+      const aptTime = (lead.viewingAppointments && lead.viewingAppointments[0]?.preferred_time) || '';
+      let tagsHtml = '';
+      if (isViewing) {
+        tagsHtml += `<span class="conv-tag conv-tag-viewing" title="Baxış Görüşü">🏡 ${escapeHtml(aptTime || 'Görüş')}</span> `;
+      }
+      if (isHigh) {
+        tagsHtml += `<span class="conv-tag conv-tag-high" title="Yüksək Maraq">🔥 Yüksək</span> `;
+      }
+      activeChatTags.innerHTML = tagsHtml;
+    }
 
     if (btnEditActivePhone) {
       btnEditActivePhone.setAttribute('data-id', lead.id);
@@ -1605,19 +1445,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  if (btnViewChat && btnViewTable) {
-    btnViewChat.addEventListener('click', () => {
-      btnViewChat.classList.add('active');
-      btnViewTable.classList.remove('active');
-      if (inboxContainer) inboxContainer.classList.remove('hidden');
-      if (leadsTableWrapper) leadsTableWrapper.classList.add('hidden');
-    });
-
-    btnViewTable.addEventListener('click', () => {
-      btnViewTable.classList.add('active');
-      btnViewChat.classList.remove('active');
-      if (inboxContainer) inboxContainer.classList.add('hidden');
-      if (leadsTableWrapper) leadsTableWrapper.classList.remove('hidden');
+  if (btnBackToConvList) {
+    btnBackToConvList.addEventListener('click', () => {
+      if (inboxContainer) {
+        inboxContainer.classList.remove('mobile-chat-open');
+      }
     });
   }
 
