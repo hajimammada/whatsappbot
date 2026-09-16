@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { validateGeminiApiKey } = require('./ai_engine');
-const driveBackup = require('./drive_backup');
+const mongoService = require('./mongo_service');
 
 const USERS_DB_PATH = path.join(__dirname, '..', 'data', 'users_db.json');
 const KNOWLEDGE_BASE_PATH = path.join(__dirname, '..', 'config', 'knowledge_base.json');
@@ -72,7 +72,7 @@ function loadUsersDb() {
 function saveUsersDb(db) {
   try {
     fs.writeFileSync(USERS_DB_PATH, JSON.stringify(db, null, 2), 'utf-8');
-    driveBackup.triggerBackup();
+    mongoService.syncUsers(db);
     return true;
   } catch (err) {
     console.error('Error saving users DB:', err);

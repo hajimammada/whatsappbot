@@ -72,11 +72,11 @@ document.addEventListener('DOMContentLoaded', () => {
       confirm_wa_logout: "Bu WhatsApp nömrəsinin əlaqəsini kəsmək və çıxış etmək istədiyinizdən əminsiniz?",
       btn_get_new_qr: "🔄 Yeni QR Kod Əldə Et",
       wa_disconnected_hint: "Bağlantı kəsilib və ya telefon üzərindən əlaqə silinib.",
-      btn_backup_drive: "Drive Backup",
-      drive_sync_connected: "Drive: Aktiv 🟢",
-      drive_sync_unconfigured: "Drive: Qoşulmayıb ⚠️",
-      drive_backup_now_success: "✅ Məlumatlar Google Drive-a uğurla saxlanıldı!",
-      drive_backup_now_loading: "⏳ Google Drive-a saxlanılır..."
+      btn_mongo_sync: "Bulud Sinxronizasiya",
+      mongo_sync_connected: "MongoDB: Aktiv 🟢",
+      mongo_sync_unconfigured: "MongoDB: Qoşulmayıb ⚠️",
+      mongo_sync_now_success: "✅ Məlumatlar MongoDB Atlas-a uğurla sinxron edildi!",
+      mongo_sync_now_loading: "⏳ MongoDB Atlas-a sinxron edilir..."
     },
     ru: {
       brand_title: "whatsappbot.hajimammad.com",
@@ -144,11 +144,11 @@ document.addEventListener('DOMContentLoaded', () => {
       confirm_wa_logout: "Вы уверены, что хотите отключить этот номер WhatsApp?",
       btn_get_new_qr: "🔄 Получить новый QR-код",
       wa_disconnected_hint: "Подключение прервано или удалено на телефоне.",
-      btn_backup_drive: "Бэкап Drive",
-      drive_sync_connected: "Drive: Активен 🟢",
-      drive_sync_unconfigured: "Drive: Не настроен ⚠️",
-      drive_backup_now_success: "✅ Данные успешно сохранены на Google Drive!",
-      drive_backup_now_loading: "⏳ Резервное копирование на Google Drive..."
+      btn_mongo_sync: "Синхронизация",
+      mongo_sync_connected: "MongoDB: Активен 🟢",
+      mongo_sync_unconfigured: "MongoDB: Не подключен ⚠️",
+      mongo_sync_now_success: "✅ Данные успешно синхронизированы с MongoDB Atlas!",
+      mongo_sync_now_loading: "⏳ Синхронизация с MongoDB Atlas..."
     },
     en: {
       brand_title: "whatsappbot.hajimammad.com",
@@ -216,11 +216,11 @@ document.addEventListener('DOMContentLoaded', () => {
       confirm_wa_logout: "Are you sure you want to disconnect this WhatsApp account?",
       btn_get_new_qr: "🔄 Get New QR Code",
       wa_disconnected_hint: "Connection disconnected or unlinked from phone.",
-      btn_backup_drive: "Drive Backup",
-      drive_sync_connected: "Drive: Active 🟢",
-      drive_sync_unconfigured: "Drive: Not Configured ⚠️",
-      drive_backup_now_success: "✅ Data successfully backed up to Google Drive!",
-      drive_backup_now_loading: "⏳ Backing up to Google Drive..."
+      btn_mongo_sync: "Cloud Sync",
+      mongo_sync_connected: "MongoDB: Active 🟢",
+      mongo_sync_unconfigured: "MongoDB: Offline ⚠️",
+      mongo_sync_now_success: "✅ Data successfully synced to MongoDB Atlas!",
+      mongo_sync_now_loading: "⏳ Syncing to MongoDB Atlas..."
     }
   };
 
@@ -279,8 +279,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof lastConnectionStatusData !== 'undefined' && lastConnectionStatusData) {
       updateConnectionStatus(lastConnectionStatusData);
     }
-    if (typeof checkDriveSyncStatus === 'function') {
-      checkDriveSyncStatus();
+    if (typeof checkMongoSyncStatus === 'function') {
+      checkMongoSyncStatus();
     }
   }
 
@@ -829,7 +829,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       renderDocumentList();
-      checkDriveSyncStatus();
+      checkMongoSyncStatus();
       if (selectedDocumentId) {
         populateEditor(selectedDocumentId);
       }
@@ -974,60 +974,60 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // -----------------------------------------------------------------
-  // Google Drive Cloud Backup Sync
+  // MongoDB Atlas Cloud Persistence Sync
   // -----------------------------------------------------------------
-  const driveSyncBadge = document.getElementById('drive-sync-badge');
-  const btnDriveBackupNow = document.getElementById('btn-drive-backup-now');
+  const mongoSyncBadge = document.getElementById('mongo-sync-badge');
+  const btnMongoSyncNow = document.getElementById('btn-mongo-sync-now');
 
-  async function checkDriveSyncStatus() {
-    if (!currentAuthToken || !driveSyncBadge) return;
+  async function checkMongoSyncStatus() {
+    if (!currentAuthToken || !mongoSyncBadge) return;
     try {
       const res = await authFetch('/api/backup/status');
       if (!res.ok) return;
       const data = await res.json();
       const dict = I18N[currentLang] || I18N.az;
 
-      if (data.configured) {
-        driveSyncBadge.textContent = dict.drive_sync_connected || 'Drive: Aktiv 🟢';
-        driveSyncBadge.className = 'drive-sync-badge connected';
-        let tip = `Google Drive Folder: ${data.folderId || ''}\nEmail: ${data.serviceAccountEmail || ''}`;
-        if (data.lastBackupAt) {
-          tip += `\nSon Ehtiyat Nüsxə: ${new Date(data.lastBackupAt).toLocaleString()}`;
+      if (data.connected) {
+        mongoSyncBadge.textContent = dict.mongo_sync_connected || 'MongoDB: Aktiv 🟢';
+        mongoSyncBadge.className = 'mongo-sync-badge connected';
+        let tip = `Baza: MongoDB Atlas (Bulud)\nStatus: Əlaqə aktivdir`;
+        if (data.lastSyncAt) {
+          tip += `\nSon Sinxronizasiya: ${new Date(data.lastSyncAt).toLocaleString()}`;
         }
-        driveSyncBadge.title = tip;
-        if (btnDriveBackupNow) btnDriveBackupNow.style.display = 'inline-flex';
+        mongoSyncBadge.title = tip;
+        if (btnMongoSyncNow) btnMongoSyncNow.style.display = 'inline-flex';
       } else {
-        driveSyncBadge.textContent = dict.drive_sync_unconfigured || 'Drive: Qoşulmayıb ⚠️';
-        driveSyncBadge.className = 'drive-sync-badge disconnected';
-        driveSyncBadge.title = 'Google Drive mühit dəyişənləri (GOOGLE_DRIVE_FOLDER_ID, GOOGLE_SERVICE_ACCOUNT_KEY) təyin edilməyib.';
-        if (btnDriveBackupNow) btnDriveBackupNow.style.display = 'none';
+        mongoSyncBadge.textContent = dict.mongo_sync_unconfigured || 'MongoDB: Qoşulmayıb ⚠️';
+        mongoSyncBadge.className = 'mongo-sync-badge disconnected';
+        mongoSyncBadge.title = data.lastSyncError ? `Xəta: ${data.lastSyncError}` : 'MongoDB Atlas bağlantısı qurulmayıb.';
+        if (btnMongoSyncNow) btnMongoSyncNow.style.display = 'none';
       }
     } catch (e) {
-      console.warn('Drive sync status check error:', e);
+      console.warn('MongoDB sync status check error:', e);
     }
   }
 
-  if (btnDriveBackupNow) {
-    btnDriveBackupNow.addEventListener('click', async () => {
+  if (btnMongoSyncNow) {
+    btnMongoSyncNow.addEventListener('click', async () => {
       const dict = I18N[currentLang] || I18N.az;
-      btnDriveBackupNow.disabled = true;
-      const origHtml = btnDriveBackupNow.innerHTML;
-      btnDriveBackupNow.textContent = dict.drive_backup_now_loading || '⏳ Saxlanılır...';
+      btnMongoSyncNow.disabled = true;
+      const origHtml = btnMongoSyncNow.innerHTML;
+      btnMongoSyncNow.textContent = dict.mongo_sync_now_loading || '⏳ Sinxron edilir...';
 
       try {
         const res = await authFetch('/api/backup/now', { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.success) {
-          alert(dict.drive_backup_now_success || '✅ Məlumatlar Google Drive-a uğurla saxlanıldı!');
-          await checkDriveSyncStatus();
+          alert(dict.mongo_sync_now_success || '✅ Məlumatlar MongoDB Atlas-a uğurla sinxron edildi!');
+          await checkMongoSyncStatus();
         } else {
-          alert('❌ Xəta: ' + (data.error || 'Backup failed'));
+          alert('❌ Xəta: ' + (data.error || 'Sync failed'));
         }
       } catch (err) {
         alert('❌ Xəta: ' + err.message);
       } finally {
-        btnDriveBackupNow.disabled = false;
-        btnDriveBackupNow.innerHTML = origHtml;
+        btnMongoSyncNow.disabled = false;
+        btnMongoSyncNow.innerHTML = origHtml;
       }
     });
   }

@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { createServer } = require('./server');
 const waClient = require('./whatsapp_client');
-const driveBackup = require('./drive_backup');
+const mongoService = require('./mongo_service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -12,11 +12,14 @@ async function bootstrap() {
   console.log(`🤖 AI Provider: ${process.env.AI_PROVIDER || 'gemini'}`);
   console.log(`⚡ Auto-Reply: ${process.env.AUTO_REPLY_ENABLED !== 'false' ? 'ENABLED' : 'DISABLED'}`);
 
-  // Restore customer data and WhatsApp credentials from Google Drive if available
+  // Initialize MongoDB Atlas connection & restore customer data and WhatsApp credentials
   try {
-    await driveBackup.restoreFromDrive();
+    const mongoOk = await mongoService.init();
+    if (mongoOk) {
+      await mongoService.restoreFromMongo();
+    }
   } catch (err) {
-    console.warn('⚠️ Google Drive restore error:', err.message);
+    console.warn('⚠️ MongoDB initialization/restore error:', err.message);
   }
 
   const app = createServer();
@@ -25,8 +28,8 @@ async function bootstrap() {
     console.log(`🌐 Web Dashboard running at: http://localhost:${PORT}`);
     console.log('------------------------------------------------------');
 
-    // Start background auto-backup timer (every 30 mins)
-    driveBackup.startAutoBackupSchedule();
+    // Start background auto-sync timer (every 15 mins)
+    mongoService.startAutoSyncSchedule();
 
     console.log('Initializing WhatsApp connection...');
 

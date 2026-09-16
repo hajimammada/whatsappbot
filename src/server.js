@@ -8,7 +8,7 @@ const waClient = require('./whatsapp_client');
 const userManager = require('./user_manager');
 const { getLeads, updateLeadStatus, updateLeadPhone } = require('./lead_manager');
 const { generateAIResponse, getAgentSettings, validateGeminiApiKey } = require('./ai_engine');
-const driveBackup = require('./drive_backup');
+const mongoService = require('./mongo_service');
 
 function getAppVersion() {
   if (process.env.APP_VERSION) {
@@ -40,7 +40,7 @@ function getAppVersion() {
     // Git command not available
   }
 
-  return 'v3.8.0';
+  return 'v3.9.0';
 }
 
 function createServer() {
@@ -472,10 +472,10 @@ function createServer() {
     }
   });
 
-  // Google Drive Cloud Backup Status & Manual Trigger
+  // MongoDB Atlas Cloud Status & Manual Trigger
   app.get('/api/backup/status', requireAuth, (req, res) => {
     try {
-      res.json(driveBackup.getStatus());
+      res.json(mongoService.getStatus());
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -483,13 +483,16 @@ function createServer() {
 
   app.post('/api/backup/now', requireAuth, async (req, res) => {
     try {
-      if (!driveBackup.isConfigured()) {
+      if (!mongoService.isConnected) {
+        await mongoService.init();
+      }
+      if (!mongoService.isConnected) {
         return res.status(400).json({
           success: false,
-          error: 'Google Drive backup is not configured (missing credentials)'
+          error: 'MongoDB Atlas not connected: ' + (mongoService.lastSyncError || 'Offline')
         });
       }
-      const result = await driveBackup.backupToDrive({ force: true });
+      const result = await mongoService.syncAll();
       if (result.success) {
         broadcastSSE('backup_completed', result);
         res.json(result);

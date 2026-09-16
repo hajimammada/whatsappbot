@@ -3,7 +3,7 @@ const path = require('path');
 const https = require('https');
 
 const LEADS_FILE = path.join(__dirname, '..', 'data', 'leads.json');
-const driveBackup = require('./drive_backup');
+const mongoService = require('./mongo_service');
 
 // Ensure data directory and leads file exist
 function ensureStorage() {
@@ -51,7 +51,7 @@ function saveLeadsList(leads) {
   try {
     ensureStorage();
     fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2), 'utf-8');
-    driveBackup.triggerBackup();
+    mongoService.syncLeads(leads);
   } catch (err) {
     console.error('Error saving leads:', err);
   }
