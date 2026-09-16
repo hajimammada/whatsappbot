@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcodeTerminal = require('qrcode-terminal');
 const QRCode = require('qrcode');
@@ -402,7 +402,7 @@ class WhatsAppClient {
     this.messageBuffers.clear();
   }
 
-  enqueueIncomingMessage(remoteJid, senderPhone, pushName, text) {
+  enqueueIncomingMessage(remoteJid, senderPhone, pushName, text, audioItem = null) {
     let buf = this.messageBuffers.get(senderPhone);
     if (!buf) {
       buf = {
@@ -410,6 +410,7 @@ class WhatsAppClient {
         senderPhone,
         pushName,
         texts: [],
+        audios: [],
         timer: null,
         isProcessing: false
       };
@@ -421,9 +422,15 @@ class WhatsAppClient {
     if (pushName && pushName !== 'WhatsApp İstifadəçisi') {
       buf.pushName = pushName;
     }
-    buf.texts.push(text);
+    if (text) {
+      buf.texts.push(text);
+    }
+    if (audioItem) {
+      buf.audios.push(audioItem);
+    }
 
-    console.log(`📥 [Buffer] +${senderPhone} üçün növbəyə alındı (Cəmi ${buf.texts.length} mesaj). Əlavə olunan: "${text}"`);
+    const audioNotice = audioItem ? ' [Audio əlavə edildi]' : '';
+    console.log(`📥 [Buffer] +${senderPhone} üçün növbəyə alındı (Cəmi ${buf.texts.length} mətn, ${buf.audios.length} audio). Əlavə olunan: "${text || ''}"${audioNotice}`);
 
     // Show WhatsApp typing indicator ("yazır...") immediately
     if (this.socket) {
@@ -448,8 +455,8 @@ class WhatsAppClient {
 
   async processMessageBuffer(senderPhone) {
     const buf = this.messageBuffers.get(senderPhone);
-    if (!buf || buf.texts.length === 0) {
-      if (buf && !buf.isProcessing && buf.texts.length === 0) {
+    if (!buf || (buf.texts.length === 0 && buf.audios.length === 0)) {
+      if (buf && !buf.isProcessing && buf.texts.length === 0 && buf.audios.length === 0) {
         this.messageBuffers.delete(senderPhone);
       }
       return;
@@ -463,8 +470,14 @@ class WhatsAppClient {
     buf.timer = null;
 
     const batchTexts = [...buf.texts];
+    const batchAudios = [...buf.audios];
     buf.texts = [];
-    const combinedText = batchTexts.join('\n');
+    buf.audios = [];
+
+    let combinedText = batchTexts.join('\n');
+    if (!combinedText.trim() && batchAudios.length > 0) {
+      combinedText = batchAudios.length === 1 ? '🎤 [Səsli mesaj]' : `🎤 [${batchAudios.length} ədəd səsli mesaj]`;
+    }
     const remoteJid = buf.remoteJid;
     const pushName = buf.pushName || 'WhatsApp İstifadəçisi';
 
@@ -492,8 +505,9 @@ class WhatsAppClient {
         } catch (e) {}
       }
 
-      console.log(`🤖 Processing AI response for +${senderPhone} (${batchTexts.length} mesaj birləşdirildi):\n"${combinedText}"`);
-      const aiResponse = await generateAIResponse(remoteJid, combinedText);
+      const audioInfo = batchAudios.length > 0 ? ` + ${batchAudios.length} audio` : '';
+      console.log(`🤖 Processing AI response for +${senderPhone} (${batchTexts.length} mətn${audioInfo} birləşdirildi):\n"${combinedText}"`);
+      const aiResponse = await generateAIResponse(remoteJid, combinedText, null, null, batchAudios);
 
       // Stop typing indicator
       if (this.socket) {
@@ -511,7 +525,7 @@ class WhatsAppClient {
 
       console.log(`📤 Sending AI Reply to +${senderPhone}: "${aiResponse.reply_text}"`);
 
-      // Send WhatsApp reply and record ID so bot doesn't consider its own reply as human takeover
+      // Send WhatsApp reply as TEXT and record ID so bot doesn't consider its own reply as human takeover
       const sent = await this.socket.sendMessage(remoteJid, { text: aiResponse.reply_text });
       if (sent?.key?.id) {
         this.botSentMessageIds.add(sent.key.id);
@@ -542,8 +556,8 @@ class WhatsAppClient {
       buf.isProcessing = false;
 
       // If new messages arrived while AI was generating, schedule processing them after short breath (2s)
-      if (buf.texts.length > 0) {
-        console.log(`🔁 +${senderPhone} üçün emal zamanı yeni ${buf.texts.length} mesaj daxil olub, 2 saniyə sonra emal ediləcək.`);
+      if (buf.texts.length > 0 || buf.audios.length > 0) {
+        console.log(`🔁 +${senderPhone} üçün emal zamanı yeni ${buf.texts.length} mətn / ${buf.audios.length} audio daxil olub, 2 saniyə sonra emal ediləcək.`);
         if (buf.timer) clearTimeout(buf.timer);
         buf.timer = setTimeout(() => {
           this.processMessageBuffer(senderPhone);
@@ -745,14 +759,46 @@ class WhatsAppClient {
           continue;
         }
 
+        const isAudio = Boolean(msg.message?.audioMessage);
+        let audioItem = null;
+
+        if (isAudio) {
+          try {
+            const audioBuffer = await downloadMediaMessage(
+              msg,
+              'buffer',
+              {},
+              {
+                logger: pino({ level: 'silent' }),
+                reuploadRequest: this.socket ? this.socket.updateMediaMessage : undefined
+              }
+            );
+            const rawMime = msg.message.audioMessage.mimetype || 'audio/ogg';
+            const cleanMime = rawMime.split(';')[0].trim();
+            const duration = msg.message.audioMessage.seconds || null;
+            audioItem = {
+              buffer: audioBuffer,
+              mimeType: cleanMime,
+              seconds: duration
+            };
+          } catch (e) {
+            console.warn(`Failed to download audio message from +${senderPhone}:`, e.message);
+          }
+        }
+
         // Extract message text
-        const text =
+        let text =
           msg.message?.conversation ||
           msg.message?.extendedTextMessage?.text ||
           msg.message?.imageMessage?.caption ||
           '';
 
-        // Ignore empty messages, receipts, app state syncs, media without caption
+        if (isAudio && (!text || text.trim() === '')) {
+          const durationStr = audioItem?.seconds ? ` (${audioItem.seconds} san)` : '';
+          text = `🎤 Səsli mesaj${durationStr}`;
+        }
+
+        // Ignore empty messages, receipts, app state syncs, media without caption/audio
         if (!text || text.trim() === '') continue;
 
         const msgTimestamp = msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000).toISOString() : new Date().toISOString();
@@ -835,8 +881,8 @@ class WhatsAppClient {
           continue;
         }
 
-        // Enqueue to intelligent message buffer (aggregates consecutive messages into unified prompt)
-        this.enqueueIncomingMessage(remoteJid, senderPhone, pushName, text);
+        // Enqueue to intelligent message buffer (aggregates consecutive messages and audios into unified prompt)
+        this.enqueueIncomingMessage(remoteJid, senderPhone, pushName, text, audioItem);
       }
     });
   }

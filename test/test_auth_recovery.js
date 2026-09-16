@@ -109,7 +109,7 @@ async function runTests() {
       headers: { 'X-API-Key': adminPassword }
     });
     assert.strictEqual(res4.status, 200, 'Expected 200 OK for status with admin password');
-    assert.strictEqual(res4.data.version, 'v3.6.0');
+    assert.strictEqual(res4.data.version, 'v3.7.0');
     console.log(`   ✅ Passed: Status returned successfully (Version: ${res4.data.version})`);
 
     // Verify unauthenticated /api/health endpoint for 24/7 Keep-Alive
@@ -324,7 +324,41 @@ async function runTests() {
     console.log(`   🤖 Bot recall reply: "${recallResp.reply_text.split('\n')[0]}..."`);
     console.log('   ✅ Passed: Message buffer queue aggregates consecutive messages and preserves history!');
 
-    console.log('\n🎉 ALL SECURITY, RATE LIMITING, MESSAGE BUFFER & PASSWORD TESTS PASSED PERFECTLY!');
+    // -------------------------------------------------------------
+    // Test 8: Audio / Voice Note Message Buffer & Processing
+    // -------------------------------------------------------------
+    console.log('8️⃣ Testing Audio / Voice Note Message Buffer & Processing...');
+    const audioPhone = '994508887766';
+    const audioJid = `${audioPhone}@s.whatsapp.net`;
+    const mockAudioItem = {
+      buffer: Buffer.from('RIFF_MOCK_OGG_OPUS_AUDIO_BYTES_12345'),
+      mimeType: 'audio/ogg',
+      seconds: 7
+    };
+
+    // Enqueue 1 audio message and 1 follow-up text message
+    waClient.enqueueIncomingMessage(audioJid, audioPhone, 'Audio User', '🎤 Səsli mesaj (7 san)', mockAudioItem);
+    waClient.enqueueIncomingMessage(audioJid, audioPhone, 'Audio User', 'Və əlavə olaraq qiymətini də deyərdiniz');
+
+    const audioBuf = waClient.messageBuffers.get(audioPhone);
+    assert.ok(audioBuf, 'Buffer should exist for audioPhone');
+    assert.strictEqual(audioBuf.texts.length, 2, 'Buffer must contain both text entries');
+    assert.strictEqual(audioBuf.audios.length, 1, 'Buffer must contain the audioItem');
+    assert.strictEqual(audioBuf.audios[0].mimeType, 'audio/ogg');
+    assert.strictEqual(audioBuf.audios[0].seconds, 7);
+
+    // Clean up timers
+    waClient.clearAllBufferTimers();
+
+    // Verify AI response generation with audioItems returns text reply
+    const audioResp = await aiEngine.generateAIResponse(audioPhone, '🎤 Səsli mesaj (7 san)', null, null, [mockAudioItem]);
+    assert.ok(audioResp, 'AI response must be returned');
+    assert.strictEqual(typeof audioResp.reply_text, 'string', 'AI reply must be a string');
+    assert.ok(audioResp.reply_text.length > 0, 'AI reply must not be empty');
+    console.log(`   🤖 Audio response text: "${audioResp.reply_text.split('\n')[0]}..."`);
+    console.log('   ✅ Passed: Audio / voice notes successfully queued, processed and replied with text!');
+
+    console.log('\n🎉 ALL SECURITY, RATE LIMITING, MESSAGE BUFFER, AUDIO & PASSWORD TESTS PASSED PERFECTLY!');
   } finally {
     server.close();
     if (originalDb !== null) {

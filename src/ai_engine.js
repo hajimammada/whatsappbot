@@ -177,6 +177,7 @@ ${activeDoc.content || 'Məlumat daxil edilməyib.'}
 4. **GÖRÜŞ / SİFARİŞ / BAXIŞ TƏYİNİ:** Əgər müştəri görüş təyin etmək, evə/məhsula baxmaq və ya sifariş vermək istədiyini bildirsə, ona uyğun vaxtı bildir və zəhmət olmasa **adını** və **dəqiq istədiyi gün/saatı** yazmasını xahiş et.
 5. **TON VƏ FORMAT:** WhatsApp formatına uyğun olaraq çox uzun olmayan, oxunaqlı, zərurət olduqda emojili (✨, 📍, 📞) şəkildə yaz.
 6. **BİRLƏŞDİRİLMİŞ VƏ ARDICIL MESAJLAR:** Müştəri ardıcıl bir neçə qısa mesaj göndərə bilər (bunlar sənə birgə sətirlərlə təqdim olunur). Mesajdakı bütün fikirləri, sualları və əvvəlki söhbət tarixçəsini bütöv şəkildə analiz et və hər bir sualı cavablandır (məsələn: istifadəçi "hansı mesajları yazmışam", "nə demişdim", "əvvəlki sualım" kimi suallar verərsə, söhbət tarixçəsinə istinad edərək dəqiq cavab ver).
+7. **SƏSLİ MESAJLAR (VOICE NOTES):** Müştəri səsli mesaj (audio) göndərə bilər. Əgər audio əlavə edilibsə, audionu diqqətlə dinlə, istifadəçinin dediklərini, suallarını və tələbini tam başa düş və rəsmi BİLİK BAZASI əsasında YALNIZ YAZILI MƏTN şəklində nəzakətli, dəqiq və aydın cavab ver (səs faylı yaratma, çıxışı yalnız JSON daxilində "reply_text" sahəsində mətn olaraq təqdim et).
 
 ### ÇIXIŞ FORMATI (JSON):
 Sən hər bir sorğu üçün YALNIZ aşağıdakı JSON formatında cavab verməlisən (başqa heç nə yazma):
@@ -187,11 +188,12 @@ Sən hər bir sorğu üçün YALNIZ aşağıdakı JSON formatında cavab verməl
   "appointment_time": "istədiyi vaxt/gün (əgər qeyd edibsə, yoxsa null)",
   "language": "az" | "ru" | "en",
   "summary": "Müraciətin 1 cümləlik qısa xülasəsi"
-}`;
+}
+`;
 }
 
 // Fallback rule engine when external API keys are unavailable
-function fallbackRuleEngine(incomingMessage, activeDoc, contactId = null) {
+function fallbackRuleEngine(incomingMessage, activeDoc, contactId = null, audioItems = []) {
   const msg = incomingMessage.toLowerCase().trim();
   const docText = activeDoc.content || '';
   const lines = docText.split('\n').map(l => l.trim()).filter(Boolean);
@@ -219,6 +221,23 @@ function fallbackRuleEngine(incomingMessage, activeDoc, contactId = null) {
         summary: incomingMessage.substring(0, 80)
       };
     }
+  }
+
+  // If incoming was an audio voice note
+  if (Array.isArray(audioItems) && audioItems.length > 0) {
+    if (lang === "ru") {
+      reply = "Здравствуйте! Ваше голосовое сообщение получено. Чем я могу Вам помочь по поводу недвижимости?";
+    } else {
+      reply = "Salam! Səsli mesajınız qəbul edildi. Zəhmət olmasa maraqlandığınız məlumatı və ya sualınızı bildirin, sizə məmnuniyyətlə kömək edək 🏡";
+    }
+    return {
+      reply_text: reply,
+      is_viewing_request: false,
+      detected_name: null,
+      appointment_time: null,
+      language: lang,
+      summary: "Səsli mesaj qəbul edildi"
+    };
   }
 
   // Check viewing / appointment
@@ -334,7 +353,7 @@ async function validateGeminiApiKey(apiKey) {
   return { valid: false, error: 'Google Gemini API ilə əlaqə qurula bilmədi: ' + errorMsg };
 }
 
-async function generateAIResponse(contactId, incomingMessage, customActiveDoc = null, userGeminiKey = null) {
+async function generateAIResponse(contactId, incomingMessage, customActiveDoc = null, userGeminiKey = null, audioItems = []) {
   const activeDoc = customActiveDoc || getActiveDocument();
   const agentSettings = getAgentSettings();
   const history = getChatHistory(contactId);
@@ -374,7 +393,24 @@ async function generateAIResponse(contactId, incomingMessage, customActiveDoc = 
         const conversationText = history.map(h => `${h.role === 'user' ? 'İstifadəçi' : 'Köməkçi'}: ${h.text}`).join('\n');
         const prompt = `${systemPrompt}\n\n### SÖHBƏT TARİXÇƏSİ:\n${conversationText}\n\nİstifadəçi: ${incomingMessage}\n\nJSON Cavab:`;
 
-        const result = await model.generateContent(prompt);
+        const parts = [prompt];
+        if (Array.isArray(audioItems) && audioItems.length > 0) {
+          for (const item of audioItems) {
+            if (item && item.buffer) {
+              const base64Data = Buffer.isBuffer(item.buffer)
+                ? item.buffer.toString('base64')
+                : String(item.buffer);
+              parts.push({
+                inlineData: {
+                  mimeType: item.mimeType || 'audio/ogg',
+                  data: base64Data
+                }
+              });
+            }
+          }
+        }
+
+        const result = await model.generateContent(parts);
         const responseText = result.response.text();
         const parsed = JSON.parse(responseText);
 
@@ -440,7 +476,7 @@ async function generateAIResponse(contactId, incomingMessage, customActiveDoc = 
   }
 
   // Resilient Fallback Engine
-  const fallbackResult = fallbackRuleEngine(incomingMessage, activeDoc, contactId);
+  const fallbackResult = fallbackRuleEngine(incomingMessage, activeDoc, contactId, audioItems);
   appendToChatHistory(contactId, 'user', incomingMessage);
   appendToChatHistory(contactId, 'assistant', fallbackResult.reply_text);
   return fallbackResult;
