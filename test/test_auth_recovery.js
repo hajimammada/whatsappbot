@@ -109,7 +109,7 @@ async function runTests() {
       headers: { 'X-API-Key': adminPassword }
     });
     assert.strictEqual(res4.status, 200, 'Expected 200 OK for status with admin password');
-    assert.strictEqual(res4.data.version, 'v3.7.0');
+    assert.strictEqual(res4.data.version, 'v3.7.1');
     console.log(`   ✅ Passed: Status returned successfully (Version: ${res4.data.version})`);
 
     // Verify unauthenticated /api/health endpoint for 24/7 Keep-Alive

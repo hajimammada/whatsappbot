@@ -15,11 +15,31 @@ function ensureStorage() {
   }
 }
 
+function isChannelOrGroup(jidOrPhone) {
+  if (!jidOrPhone) return false;
+  const str = String(jidOrPhone).toLowerCase();
+  const clean = str.replace(/@.+/, '').replace(/\D/g, '');
+  return (
+    str.endsWith('@newsletter') ||
+    str.includes('newsletter') ||
+    str.endsWith('@g.us') ||
+    str.endsWith('@broadcast') ||
+    str.endsWith('@call') ||
+    str === 'status@broadcast' ||
+    (clean.startsWith('120363') && clean.length >= 17)
+  );
+}
+
 function getLeads() {
   try {
     ensureStorage();
     const data = fs.readFileSync(LEADS_FILE, 'utf-8');
-    return JSON.parse(data || '[]');
+    const rawList = JSON.parse(data || '[]');
+    const filtered = rawList.filter(l => !isChannelOrGroup(l.phoneNumber) && !isChannelOrGroup(l.jid) && !isChannelOrGroup(l.lid));
+    if (filtered.length !== rawList.length) {
+      saveLeadsList(filtered);
+    }
+    return filtered;
   } catch (err) {
     console.error('Error reading leads:', err);
     return [];
@@ -74,6 +94,10 @@ async function sendTelegramAlert(lead, viewingRequest) {
 }
 
 async function recordLead(phoneNumber, rawMessage, aiAnalysis = null, contactName = null, jid = null) {
+  if (isChannelOrGroup(phoneNumber) || isChannelOrGroup(jid)) {
+    return null;
+  }
+
   const leads = getLeads();
   const cleanPhone = String(phoneNumber || '').replace(/@.+/, '').replace(/\D/g, '');
   const cleanJid = jid || (phoneNumber && String(phoneNumber).includes('@') ? phoneNumber : null);

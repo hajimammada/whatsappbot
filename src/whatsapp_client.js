@@ -40,6 +40,21 @@ function archiveAuthDir() {
   }
 }
 
+function isIgnoredJid(remoteJid) {
+  if (!remoteJid) return true;
+  const str = String(remoteJid).toLowerCase();
+  const clean = str.replace(/@.+/, '').replace(/\D/g, '');
+  return (
+    str.endsWith('@g.us') ||
+    str.endsWith('@newsletter') ||
+    str.endsWith('@broadcast') ||
+    str.endsWith('@call') ||
+    str === 'status@broadcast' ||
+    str.includes('newsletter') ||
+    (clean.startsWith('120363') && clean.length >= 17)
+  );
+}
+
 class WhatsAppClient {
   constructor() {
     this.socket = null;
@@ -388,7 +403,7 @@ class WhatsAppClient {
       userInfo: this.userInfo,
       autoReplyEnabled: this.autoReplyEnabled,
       chatStatuses: this.getAllChatStatuses(),
-      recentMessages: this.recentMessages.slice(-20)
+      recentMessages: this.recentMessages.filter(m => !isIgnoredJid(m.from) && !isIgnoredJid(m.to)).slice(-20)
     };
   }
 
@@ -403,6 +418,8 @@ class WhatsAppClient {
   }
 
   enqueueIncomingMessage(remoteJid, senderPhone, pushName, text, audioItem = null) {
+    if (isIgnoredJid(remoteJid) || isIgnoredJid(senderPhone)) return;
+
     let buf = this.messageBuffers.get(senderPhone);
     if (!buf) {
       buf = {
@@ -708,10 +725,11 @@ class WhatsAppClient {
           console.log(`📥 WhatsApp chat tarixçəsi sinxronlaşdırılır (${messages.length} mesaj)...`);
           for (const msg of messages) {
             const remoteJid = msg.key?.remoteJid;
-            if (!remoteJid || remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') continue;
+            if (!remoteJid || isIgnoredJid(remoteJid)) continue;
 
             const resolved = this.resolveContactPhone(remoteJid, msg);
             const senderPhone = resolved.phone;
+            if (isIgnoredJid(senderPhone)) continue;
             const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || '';
             if (!text || text.trim() === '') continue;
 
@@ -745,13 +763,11 @@ class WhatsAppClient {
     this.socket.ev.on('messages.upsert', async (m) => {
       for (const msg of m.messages) {
         const remoteJid = msg.key.remoteJid;
-        if (!remoteJid) continue;
-
-        // Ignore group chats and status broadcasts
-        if (remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') continue;
+        if (!remoteJid || isIgnoredJid(remoteJid)) continue;
 
         const resolved = this.resolveContactPhone(remoteJid, msg);
         const senderPhone = resolved.phone;
+        if (!senderPhone || isIgnoredJid(senderPhone)) continue;
 
         // Ignore messages sent by the bot itself (prevent self-pause echo loop)
         if (msg.key.id && this.botSentMessageIds.has(msg.key.id)) {
