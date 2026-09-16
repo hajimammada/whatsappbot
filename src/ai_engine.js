@@ -137,18 +137,26 @@ function getAgentSettings() {
   }
 }
 
+function normalizeContactKey(contactId) {
+  if (!contactId) return 'unknown';
+  const clean = String(contactId).replace(/@.+/, '').replace(/\D/g, '');
+  return clean || String(contactId);
+}
+
 function getChatHistory(contactId) {
-  if (!conversationHistories.has(contactId)) {
-    conversationHistories.set(contactId, []);
+  const key = normalizeContactKey(contactId);
+  if (!conversationHistories.has(key)) {
+    conversationHistories.set(key, []);
   }
-  return conversationHistories.get(contactId);
+  return conversationHistories.get(key);
 }
 
 function appendToChatHistory(contactId, role, text) {
-  const history = getChatHistory(contactId);
+  const key = normalizeContactKey(contactId);
+  const history = getChatHistory(key);
   history.push({ role, text, timestamp: new Date().toISOString() });
-  if (history.length > 12) {
-    history.splice(0, history.length - 12);
+  if (history.length > 20) {
+    history.splice(0, history.length - 20);
   }
 }
 
@@ -168,6 +176,7 @@ ${activeDoc.content || 'Məlumat daxil edilməyib.'}
 3. **QİYMƏT VƏ RAZILAŞMA:** Əgər sənəddə qiymət və ya endirim siyasəti qeyd olunubsa, sənəddəki qaydalara tam əməl et.
 4. **GÖRÜŞ / SİFARİŞ / BAXIŞ TƏYİNİ:** Əgər müştəri görüş təyin etmək, evə/məhsula baxmaq və ya sifariş vermək istədiyini bildirsə, ona uyğun vaxtı bildir və zəhmət olmasa **adını** və **dəqiq istədiyi gün/saatı** yazmasını xahiş et.
 5. **TON VƏ FORMAT:** WhatsApp formatına uyğun olaraq çox uzun olmayan, oxunaqlı, zərurət olduqda emojili (✨, 📍, 📞) şəkildə yaz.
+6. **BİRLƏŞDİRİLMİŞ VƏ ARDICIL MESAJLAR:** Müştəri ardıcıl bir neçə qısa mesaj göndərə bilər (bunlar sənə birgə sətirlərlə təqdim olunur). Mesajdakı bütün fikirləri, sualları və əvvəlki söhbət tarixçəsini bütöv şəkildə analiz et və hər bir sualı cavablandır (məsələn: istifadəçi "hansı mesajları yazmışam", "nə demişdim", "əvvəlki sualım" kimi suallar verərsə, söhbət tarixçəsinə istinad edərək dəqiq cavab ver).
 
 ### ÇIXIŞ FORMATI (JSON):
 Sən hər bir sorğu üçün YALNIZ aşağıdakı JSON formatında cavab verməlisən (başqa heç nə yazma):
@@ -182,7 +191,7 @@ Sən hər bir sorğu üçün YALNIZ aşağıdakı JSON formatında cavab verməl
 }
 
 // Fallback rule engine when external API keys are unavailable
-function fallbackRuleEngine(incomingMessage, activeDoc) {
+function fallbackRuleEngine(incomingMessage, activeDoc, contactId = null) {
   const msg = incomingMessage.toLowerCase().trim();
   const docText = activeDoc.content || '';
   const lines = docText.split('\n').map(l => l.trim()).filter(Boolean);
@@ -190,6 +199,27 @@ function fallbackRuleEngine(incomingMessage, activeDoc) {
   let isViewing = false;
   let reply = "";
   let lang = /[а-яё]/i.test(msg) ? "ru" : "az";
+
+  // Check if asking about previous conversation history
+  if (contactId && (msg.includes("hansı mesaj") || msg.includes("hansi mesaj") || msg.includes("nə yazmışam") || msg.includes("ne yazmisam") || msg.includes("əvvəlki mesaj") || msg.includes("son mesaj") || msg.includes("nə soruşmuşdum") || msg.includes("ne sorusmusdum"))) {
+    const hist = getChatHistory(contactId);
+    const userMsgs = hist.filter(h => h.role === 'user').map(h => `• ${h.text}`);
+    if (userMsgs.length > 0) {
+      if (lang === "ru") {
+        reply = `Ваши предыдущие сообщения:\n${userMsgs.slice(-5).join('\n')}\n\nЧем я еще могу помочь?`;
+      } else {
+        reply = `Sizin əvvəlki müraciətləriniz:\n${userMsgs.slice(-5).join('\n')}\n\nSizə başqa necə kömək edə bilərəm?`;
+      }
+      return {
+        reply_text: reply,
+        is_viewing_request: false,
+        detected_name: null,
+        appointment_time: null,
+        language: lang,
+        summary: incomingMessage.substring(0, 80)
+      };
+    }
+  }
 
   // Check viewing / appointment
   if (msg.includes("baxmaq") || msg.includes("baxis") || msg.includes("baxış") || msg.includes("görüş") || msg.includes("gorus") || msg.includes("посмотреть") || msg.includes("осмотр") || msg.includes("встреч")) {
@@ -314,7 +344,7 @@ async function generateAIResponse(contactId, incomingMessage, customActiveDoc = 
 
   const systemPrompt = buildSystemPrompt(activeDoc);
 
-  if (geminiKey && geminiKey !== 'your_gemini_api_key_here') {
+  if (geminiKey && geminiKey !== 'your_gemini_api_key_here' && !geminiKey.startsWith('mock_')) {
     const discovered = await discoverAvailableGeminiModels(geminiKey);
     const configuredModel = agentSettings.models?.gemini?.model_name;
     const baseList = (discovered && discovered.length > 0) ? discovered : [
@@ -410,7 +440,7 @@ async function generateAIResponse(contactId, incomingMessage, customActiveDoc = 
   }
 
   // Resilient Fallback Engine
-  const fallbackResult = fallbackRuleEngine(incomingMessage, activeDoc);
+  const fallbackResult = fallbackRuleEngine(incomingMessage, activeDoc, contactId);
   appendToChatHistory(contactId, 'user', incomingMessage);
   appendToChatHistory(contactId, 'assistant', fallbackResult.reply_text);
   return fallbackResult;

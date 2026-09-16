@@ -9,6 +9,8 @@ delete process.env.RECOVERY_PASSWORD;
 
 const { createServer } = require('../src/server');
 const userManager = require('../src/user_manager');
+const waClient = require('../src/whatsapp_client');
+const aiEngine = require('../src/ai_engine');
 
 function makeRequest(options, postData = null) {
   return new Promise((resolve, reject) => {
@@ -107,7 +109,7 @@ async function runTests() {
       headers: { 'X-API-Key': adminPassword }
     });
     assert.strictEqual(res4.status, 200, 'Expected 200 OK for status with admin password');
-    assert.strictEqual(res4.data.version, 'v3.5.5');
+    assert.strictEqual(res4.data.version, 'v3.6.0');
     console.log(`   ✅ Passed: Status returned successfully (Version: ${res4.data.version})`);
 
     // Verify unauthenticated /api/health endpoint for 24/7 Keep-Alive
@@ -283,7 +285,46 @@ async function runTests() {
     assert.ok(hitRateLimit, 'Expected 429 Too Many Requests after excessive failed login attempts');
     console.log('   ✅ Passed: Rate limiter actively blocked brute-force attempts with HTTP 429.');
 
-    console.log('\n🎉 ALL SECURITY, RATE LIMITING & PASSWORD-ONLY TESTS PASSED PERFECTLY!');
+    // -------------------------------------------------------------
+    // Test 7: Message Buffer Queue & Contact History Normalization
+    // -------------------------------------------------------------
+    console.log('7️⃣ Testing Message Buffer Queue & Contact History Normalization...');
+    const testPhone = '994509998877';
+    const testJid = `${testPhone}@s.whatsapp.net`;
+
+    // Enqueue 3 rapid consecutive messages
+    waClient.enqueueIncomingMessage(testJid, testPhone, 'Test User', 'Birinci mesaj: Son olaraq hansı mesajları yazmışam?');
+    waClient.enqueueIncomingMessage(testJid, testPhone, 'Test User', 'İkinci mesaj: Hə?');
+    waClient.enqueueIncomingMessage(testJid, testPhone, 'Test User', 'Üçüncü mesaj: Necəsən?');
+
+    const buf = waClient.messageBuffers.get(testPhone);
+    assert.ok(buf, 'Buffer should exist for testPhone');
+    assert.strictEqual(buf.texts.length, 3, 'Buffer must contain all 3 rapid messages without dropping');
+    assert.strictEqual(buf.texts[0], 'Birinci mesaj: Son olaraq hansı mesajları yazmışam?');
+    assert.strictEqual(buf.texts[1], 'İkinci mesaj: Hə?');
+    assert.strictEqual(buf.texts[2], 'Üçüncü mesaj: Necəsən?');
+    assert.ok(buf.timer !== null, 'Debounce timer should be active');
+
+    // Clean up timer
+    waClient.clearAllBufferTimers();
+    assert.strictEqual(waClient.messageBuffers.size, 0, 'Buffer must be cleanly emptied by clearAllBufferTimers()');
+
+    // Verify contact ID normalization for history
+    const histFromJid = aiEngine.getChatHistory(testJid);
+    const histFromPhone = aiEngine.getChatHistory(testPhone);
+    assert.strictEqual(histFromJid, histFromPhone, 'Both JID and Phone must resolve to identical history reference');
+
+    histFromPhone.push({ role: 'user', text: 'Ev satılıbmı?', timestamp: new Date().toISOString() });
+    histFromPhone.push({ role: 'assistant', text: 'Xeyr, ev satışdadır.', timestamp: new Date().toISOString() });
+    assert.strictEqual(aiEngine.getChatHistory(testJid).length, 2, 'History updated via phone must be visible via JID');
+
+    // Verify fallback engine history recall
+    const recallResp = await aiEngine.generateAIResponse(testPhone, 'Son olaraq nə yazmışam sənə?');
+    assert.ok(recallResp.reply_text, 'Recall response must have reply text');
+    console.log(`   🤖 Bot recall reply: "${recallResp.reply_text.split('\n')[0]}..."`);
+    console.log('   ✅ Passed: Message buffer queue aggregates consecutive messages and preserves history!');
+
+    console.log('\n🎉 ALL SECURITY, RATE LIMITING, MESSAGE BUFFER & PASSWORD TESTS PASSED PERFECTLY!');
   } finally {
     server.close();
     if (originalDb !== null) {

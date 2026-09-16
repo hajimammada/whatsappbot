@@ -50,6 +50,7 @@ class WhatsAppClient {
     this.autoReplyEnabled = process.env.AUTO_REPLY_ENABLED !== 'false';
     this.recentMessages = [];
     this.cooldowns = new Map(); // sender -> timestamp
+    this.messageBuffers = new Map(); // senderPhone -> { remoteJid, senderPhone, pushName, texts: [], timer: null, isProcessing: false }
     this.humanTakeovers = new Map(); // remoteJid or phone -> timestamp
     this.botSentMessageIds = new Set(); // message ID -> true
     this.eventListeners = [];
@@ -391,6 +392,168 @@ class WhatsAppClient {
     };
   }
 
+  clearAllBufferTimers() {
+    for (const [phone, buf] of this.messageBuffers.entries()) {
+      if (buf.timer) {
+        clearTimeout(buf.timer);
+        buf.timer = null;
+      }
+    }
+    this.messageBuffers.clear();
+  }
+
+  enqueueIncomingMessage(remoteJid, senderPhone, pushName, text) {
+    let buf = this.messageBuffers.get(senderPhone);
+    if (!buf) {
+      buf = {
+        remoteJid,
+        senderPhone,
+        pushName,
+        texts: [],
+        timer: null,
+        isProcessing: false
+      };
+      this.messageBuffers.set(senderPhone, buf);
+    }
+
+    // Keep contact details updated
+    buf.remoteJid = remoteJid;
+    if (pushName && pushName !== 'WhatsApp İstifadəçisi') {
+      buf.pushName = pushName;
+    }
+    buf.texts.push(text);
+
+    console.log(`📥 [Buffer] +${senderPhone} üçün növbəyə alındı (Cəmi ${buf.texts.length} mesaj). Əlavə olunan: "${text}"`);
+
+    // Show WhatsApp typing indicator ("yazır...") immediately
+    if (this.socket) {
+      this.socket.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+    }
+
+    // If currently generating AI reply for a prior batch, let it finish;
+    // this message will automatically be picked up in the next pass.
+    if (buf.isProcessing) {
+      console.log(`⏳ +${senderPhone} üçün hazırda AI cavab hazırlanır. Yeni mesaj növbəti dövrə üçün buferə əlavə edildi.`);
+      return;
+    }
+
+    // Debounce: Wait 3.5 seconds of silence before bundling messages and invoking AI
+    if (buf.timer) {
+      clearTimeout(buf.timer);
+    }
+    buf.timer = setTimeout(() => {
+      this.processMessageBuffer(senderPhone);
+    }, 3500);
+  }
+
+  async processMessageBuffer(senderPhone) {
+    const buf = this.messageBuffers.get(senderPhone);
+    if (!buf || buf.texts.length === 0) {
+      if (buf && !buf.isProcessing && buf.texts.length === 0) {
+        this.messageBuffers.delete(senderPhone);
+      }
+      return;
+    }
+
+    if (buf.isProcessing) {
+      return;
+    }
+
+    buf.isProcessing = true;
+    buf.timer = null;
+
+    const batchTexts = [...buf.texts];
+    buf.texts = [];
+    const combinedText = batchTexts.join('\n');
+    const remoteJid = buf.remoteJid;
+    const pushName = buf.pushName || 'WhatsApp İstifadəçisi';
+
+    try {
+      // Check pause / human takeover
+      if (this.isChatPaused(remoteJid)) {
+        const settings = getAgentSettings();
+        const takeoverMinutes = settings.human_takeover_minutes !== undefined ? settings.human_takeover_minutes : 30;
+        console.log(`👤 Siz şəxsən söhbətdə olduğunuz üçün bot +${senderPhone} nömrəsinə mane olmur (${takeoverMinutes} dəqiqəlik sükut aktivdir).`);
+        buf.isProcessing = false;
+        return;
+      }
+
+      // Check if auto-reply is globally enabled
+      if (!this.autoReplyEnabled) {
+        console.log(`ℹ️ Auto-Reply is disabled globally. Mesajlar buferləşdirildi, lakin avto-cavab göndərilmədi.`);
+        buf.isProcessing = false;
+        return;
+      }
+
+      // Show typing indicator ("yazır...")
+      if (this.socket) {
+        try {
+          await this.socket.sendPresenceUpdate('composing', remoteJid);
+        } catch (e) {}
+      }
+
+      console.log(`🤖 Processing AI response for +${senderPhone} (${batchTexts.length} mesaj birləşdirildi):\n"${combinedText}"`);
+      const aiResponse = await generateAIResponse(remoteJid, combinedText);
+
+      // Stop typing indicator
+      if (this.socket) {
+        try {
+          await this.socket.sendPresenceUpdate('paused', remoteJid);
+        } catch (e) {}
+      }
+
+      // CRITICAL SAFETY CHECK: Did the owner speak while AI was generating?
+      if (this.isChatPaused(remoteJid)) {
+        console.log(`🛑 Siz bu arada mesaj yazdığınız üçün hazırlanmış AI cavabı ləğv edildi və alıcıya göndərilmədi!`);
+        buf.isProcessing = false;
+        return;
+      }
+
+      console.log(`📤 Sending AI Reply to +${senderPhone}: "${aiResponse.reply_text}"`);
+
+      // Send WhatsApp reply and record ID so bot doesn't consider its own reply as human takeover
+      const sent = await this.socket.sendMessage(remoteJid, { text: aiResponse.reply_text });
+      if (sent?.key?.id) {
+        this.botSentMessageIds.add(sent.key.id);
+        if (this.botSentMessageIds.size > 2000) {
+          const first = this.botSentMessageIds.values().next().value;
+          this.botSentMessageIds.delete(first);
+        }
+      }
+
+      // Record Lead and Appointment with combinedText
+      await recordLead(senderPhone, combinedText, aiResponse, pushName, remoteJid);
+
+      const outgoingLog = {
+        id: (sent?.key?.id) || ('reply_' + Date.now()),
+        to: senderPhone,
+        text: aiResponse.reply_text,
+        direction: 'outgoing',
+        timestamp: new Date().toISOString(),
+        isViewingRequest: aiResponse.is_viewing_request
+      };
+      this.recentMessages.push(outgoingLog);
+      if (this.recentMessages.length > 100) this.recentMessages.shift();
+      this.notifySubscribers('new_message', outgoingLog);
+      this.notifySubscribers('leads_updated', {});
+    } catch (err) {
+      console.error(`Error processing/sending reply to +${senderPhone}:`, err);
+    } finally {
+      buf.isProcessing = false;
+
+      // If new messages arrived while AI was generating, schedule processing them after short breath (2s)
+      if (buf.texts.length > 0) {
+        console.log(`🔁 +${senderPhone} üçün emal zamanı yeni ${buf.texts.length} mesaj daxil olub, 2 saniyə sonra emal ediləcək.`);
+        if (buf.timer) clearTimeout(buf.timer);
+        buf.timer = setTimeout(() => {
+          this.processMessageBuffer(senderPhone);
+        }, 2000);
+      } else {
+        this.messageBuffers.delete(senderPhone);
+      }
+    }
+  }
+
   async start() {
     if (this.socket) {
       try {
@@ -666,73 +829,14 @@ class WhatsAppClient {
           continue;
         }
 
-        // Check cooldown (10 seconds between automatic replies to same sender)
-        const now = Date.now();
-        const lastTime = this.cooldowns.get(remoteJid) || 0;
-        if (now - lastTime < 10000) {
-          console.log(`⏳ Cooldown active for +${senderPhone}, skipping duplicate auto-reply.`);
-          continue;
-        }
-        this.cooldowns.set(remoteJid, now);
-
         // If auto-reply is disabled globally, just log
         if (!this.autoReplyEnabled) {
           console.log(`ℹ️ Auto-Reply is disabled globally. Message recorded without AI reply.`);
           continue;
         }
 
-        const processStartTime = Date.now();
-
-        // Show typing indicator ("yazır...") for 2.5 seconds before replying
-        try {
-          await this.socket.sendPresenceUpdate('composing', remoteJid);
-          await new Promise((resolve) => setTimeout(resolve, 2500));
-          await this.socket.sendPresenceUpdate('paused', remoteJid);
-        } catch (e) {
-          // Non-critical
-        }
-
-        // Generate AI response
-        try {
-          console.log(`🤖 Processing AI response for +${senderPhone}...`);
-          const aiResponse = await generateAIResponse(remoteJid, text);
-
-          // CRITICAL SAFETY CHECK: Did the owner speak while AI was generating?
-          if (this.isChatPaused(remoteJid)) {
-            console.log(`🛑 Siz bu arada mesaj yazdığınız üçün hazırlanmış AI cavabı ləğv edildi və alıcıya göndərilmədi!`);
-            continue;
-          }
-
-          console.log(`📤 Sending AI Reply to +${senderPhone}: "${aiResponse.reply_text}"`);
-
-          // Send WhatsApp reply and record ID so bot doesn't consider its own reply as human takeover
-          const sent = await this.socket.sendMessage(remoteJid, { text: aiResponse.reply_text });
-          if (sent?.key?.id) {
-            this.botSentMessageIds.add(sent.key.id);
-            if (this.botSentMessageIds.size > 2000) {
-              const first = this.botSentMessageIds.values().next().value;
-              this.botSentMessageIds.delete(first);
-            }
-          }
-
-          // Record Lead and Appointment
-          await recordLead(senderPhone, text, aiResponse, pushName, remoteJid);
-
-          const outgoingLog = {
-            id: (sent?.key?.id) || ('reply_' + Date.now()),
-            to: senderPhone,
-            text: aiResponse.reply_text,
-            direction: 'outgoing',
-            timestamp: new Date().toISOString(),
-            isViewingRequest: aiResponse.is_viewing_request
-          };
-          this.recentMessages.push(outgoingLog);
-          if (this.recentMessages.length > 100) this.recentMessages.shift();
-          this.notifySubscribers('new_message', outgoingLog);
-          this.notifySubscribers('leads_updated', {});
-        } catch (err) {
-          console.error(`Error processing/sending reply to +${senderPhone}:`, err);
-        }
+        // Enqueue to intelligent message buffer (aggregates consecutive messages into unified prompt)
+        this.enqueueIncomingMessage(remoteJid, senderPhone, pushName, text);
       }
     });
   }
@@ -756,6 +860,7 @@ class WhatsAppClient {
       this.userInfo = null;
       this.qrCodeRaw = null;
       this.qrCodeDataUrl = null;
+      this.clearAllBufferTimers();
       this.notifySubscribers('status_change', { status: this.status });
 
       archiveAuthDir();
@@ -784,6 +889,7 @@ class WhatsAppClient {
     this.userInfo = null;
     this.qrCodeRaw = null;
     this.qrCodeDataUrl = null;
+    this.clearAllBufferTimers();
     this.notifySubscribers('status_change', { status: this.status });
 
     archiveAuthDir();
