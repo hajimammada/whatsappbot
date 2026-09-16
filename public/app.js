@@ -1173,19 +1173,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const isPaused = chatStatus && chatStatus.isPaused;
       const initial = (l.name && l.name.charAt(0)) ? l.name.charAt(0).toUpperCase() : '👤';
       const timeStr = l.lastContact ? formatRelativeTime(l.lastContact) : '';
-      const isHigh = l.interestLevel === 'high';
-      const isViewing = l.status === 'viewing_requested' || (l.viewingAppointments && l.viewingAppointments.length > 0);
-      const aptTime = (l.viewingAppointments && l.viewingAppointments[0]?.preferred_time) || '';
       const msgCount = (l.messages && l.messages.length) || 0;
       const targetPhone = l.phoneNumber || l.lid || l.platformId || '';
       const formattedPhone = targetPhone ? (targetPhone.startsWith('+') ? targetPhone : '+' + targetPhone) : '';
 
-      const viewingBadge = isViewing
-        ? `<span class="conv-tag conv-tag-viewing" title="Görüş: ${escapeHtml(aptTime || '')}">🏡 ${escapeHtml(aptTime || 'Görüş')}</span>`
-        : '';
-      const highBadge = isHigh
-        ? `<span class="conv-tag conv-tag-high" title="Yüksək Maraq">🔥 Yüksək</span>`
-        : '';
       const msgCountBadge = msgCount > 1
         ? `<span class="conv-msg-count">${msgCount}</span>`
         : '';
@@ -1203,11 +1194,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="conv-sub-row">
               <span class="conv-phone font-mono">${escapeHtml(formattedPhone)}</span>
-              <div class="conv-tags">
-                ${viewingBadge}
-                ${highBadge}
-                ${msgCountBadge}
-              </div>
+              ${msgCountBadge}
             </div>
             <div class="conv-bot-row">
               <span class="conv-preview" title="${escapeHtml(l.lastMessage || '')}">${escapeHtml(l.lastMessage || '...')}</span>

@@ -1,6 +1,6 @@
 {
   "name": "whatsappbot",
-  "version": "3.10.1",
+  "version": "3.10.2",
   "description": "24/7 Universal AI WhatsApp Agent - whatsappbot.hajimammad.com",
   "homepage": "https://whatsappbot.hajimammad.com",
   "main": "src/index.js",
