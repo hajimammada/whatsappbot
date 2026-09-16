@@ -237,6 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!I18N[lang]) lang = 'az';
     currentLang = lang;
     localStorage.setItem('app_lang', lang);
+    document.documentElement.lang = lang;
 
     document.querySelectorAll('.lang-btn').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('data-lang') === lang);
@@ -827,6 +828,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    const dict = I18N[currentLang] || I18N.az;
     docList.innerHTML = documents.map(d => {
       const isActive = d.id === activeDocumentId;
       const isSelected = d.id === selectedDocumentId;
@@ -837,7 +839,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="doc-item-title">${escapeHtml(d.title || 'Document')}</div>
           <div class="doc-item-meta">
             <span>${updatedDate}</span>
-            ${isActive ? '<span class="badge-active-kb">⭐ ACTIVE</span>' : ''}
+            ${isActive ? `<span class="badge-active-kb">⭐ ${dict.wa_state_connected || 'Active'}</span>` : ''}
           </div>
         </div>
       `;
