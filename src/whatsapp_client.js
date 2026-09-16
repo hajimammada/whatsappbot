@@ -8,6 +8,7 @@ const fs = require('fs');
 const { generateAIResponse, getAgentSettings } = require('./ai_engine');
 const { recordLead, migrateLeadLidToPhone } = require('./lead_manager');
 const pkg = require('../package.json');
+const driveBackup = require('./drive_backup');
 
 const AUTH_DIR = path.join(__dirname, '..', 'auth_info_baileys');
 const LID_MAPPINGS_FILE = path.join(__dirname, '..', 'data', 'lid_mappings.json');
@@ -110,6 +111,7 @@ class WhatsAppClient {
         obj[l] = p;
       }
       fs.writeFileSync(LID_MAPPINGS_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+      driveBackup.triggerBackup();
     } catch (e) {
       console.warn('Could not save lid_mappings.json:', e);
     }
@@ -617,7 +619,10 @@ class WhatsAppClient {
       syncFullHistory: false
     });
 
-    this.socket.ev.on('creds.update', saveCreds);
+    this.socket.ev.on('creds.update', async () => {
+      await saveCreds();
+      driveBackup.triggerBackup(5000);
+    });
 
     this.socket.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
@@ -678,6 +683,7 @@ class WhatsAppClient {
           status: this.status,
           userInfo: this.userInfo
         });
+        driveBackup.triggerBackup(3000);
       }
     });
 

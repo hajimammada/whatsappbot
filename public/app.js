@@ -71,7 +71,12 @@ document.addEventListener('DOMContentLoaded', () => {
       logout_wa: "🚪 WhatsApp-dan Çıxış",
       confirm_wa_logout: "Bu WhatsApp nömrəsinin əlaqəsini kəsmək və çıxış etmək istədiyinizdən əminsiniz?",
       btn_get_new_qr: "🔄 Yeni QR Kod Əldə Et",
-      wa_disconnected_hint: "Bağlantı kəsilib və ya telefon üzərindən əlaqə silinib."
+      wa_disconnected_hint: "Bağlantı kəsilib və ya telefon üzərindən əlaqə silinib.",
+      btn_backup_drive: "Drive Backup",
+      drive_sync_connected: "Drive: Aktiv 🟢",
+      drive_sync_unconfigured: "Drive: Qoşulmayıb ⚠️",
+      drive_backup_now_success: "✅ Məlumatlar Google Drive-a uğurla saxlanıldı!",
+      drive_backup_now_loading: "⏳ Google Drive-a saxlanılır..."
     },
     ru: {
       brand_title: "whatsappbot.hajimammad.com",
@@ -138,7 +143,12 @@ document.addEventListener('DOMContentLoaded', () => {
       logout_wa: "🚪 Отключить WhatsApp",
       confirm_wa_logout: "Вы уверены, что хотите отключить этот номер WhatsApp?",
       btn_get_new_qr: "🔄 Получить новый QR-код",
-      wa_disconnected_hint: "Подключение прервано или удалено на телефоне."
+      wa_disconnected_hint: "Подключение прервано или удалено на телефоне.",
+      btn_backup_drive: "Бэкап Drive",
+      drive_sync_connected: "Drive: Активен 🟢",
+      drive_sync_unconfigured: "Drive: Не настроен ⚠️",
+      drive_backup_now_success: "✅ Данные успешно сохранены на Google Drive!",
+      drive_backup_now_loading: "⏳ Резервное копирование на Google Drive..."
     },
     en: {
       brand_title: "whatsappbot.hajimammad.com",
@@ -205,7 +215,12 @@ document.addEventListener('DOMContentLoaded', () => {
       logout_wa: "🚪 Disconnect WhatsApp",
       confirm_wa_logout: "Are you sure you want to disconnect this WhatsApp account?",
       btn_get_new_qr: "🔄 Get New QR Code",
-      wa_disconnected_hint: "Connection disconnected or unlinked from phone."
+      wa_disconnected_hint: "Connection disconnected or unlinked from phone.",
+      btn_backup_drive: "Drive Backup",
+      drive_sync_connected: "Drive: Active 🟢",
+      drive_sync_unconfigured: "Drive: Not Configured ⚠️",
+      drive_backup_now_success: "✅ Data successfully backed up to Google Drive!",
+      drive_backup_now_loading: "⏳ Backing up to Google Drive..."
     }
   };
 
@@ -263,6 +278,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (typeof lastConnectionStatusData !== 'undefined' && lastConnectionStatusData) {
       updateConnectionStatus(lastConnectionStatusData);
+    }
+    if (typeof checkDriveSyncStatus === 'function') {
+      checkDriveSyncStatus();
     }
   }
 
@@ -811,6 +829,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       renderDocumentList();
+      checkDriveSyncStatus();
       if (selectedDocumentId) {
         populateEditor(selectedDocumentId);
       }
@@ -950,6 +969,65 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadDocuments();
       } catch (e) {
         alert('Error: ' + e.message);
+      }
+    });
+  }
+
+  // -----------------------------------------------------------------
+  // Google Drive Cloud Backup Sync
+  // -----------------------------------------------------------------
+  const driveSyncBadge = document.getElementById('drive-sync-badge');
+  const btnDriveBackupNow = document.getElementById('btn-drive-backup-now');
+
+  async function checkDriveSyncStatus() {
+    if (!currentAuthToken || !driveSyncBadge) return;
+    try {
+      const res = await authFetch('/api/backup/status');
+      if (!res.ok) return;
+      const data = await res.json();
+      const dict = I18N[currentLang] || I18N.az;
+
+      if (data.configured) {
+        driveSyncBadge.textContent = dict.drive_sync_connected || 'Drive: Aktiv 🟢';
+        driveSyncBadge.className = 'drive-sync-badge connected';
+        let tip = `Google Drive Folder: ${data.folderId || ''}\nEmail: ${data.serviceAccountEmail || ''}`;
+        if (data.lastBackupAt) {
+          tip += `\nSon Ehtiyat Nüsxə: ${new Date(data.lastBackupAt).toLocaleString()}`;
+        }
+        driveSyncBadge.title = tip;
+        if (btnDriveBackupNow) btnDriveBackupNow.style.display = 'inline-flex';
+      } else {
+        driveSyncBadge.textContent = dict.drive_sync_unconfigured || 'Drive: Qoşulmayıb ⚠️';
+        driveSyncBadge.className = 'drive-sync-badge disconnected';
+        driveSyncBadge.title = 'Google Drive mühit dəyişənləri (GOOGLE_DRIVE_FOLDER_ID, GOOGLE_SERVICE_ACCOUNT_KEY) təyin edilməyib.';
+        if (btnDriveBackupNow) btnDriveBackupNow.style.display = 'none';
+      }
+    } catch (e) {
+      console.warn('Drive sync status check error:', e);
+    }
+  }
+
+  if (btnDriveBackupNow) {
+    btnDriveBackupNow.addEventListener('click', async () => {
+      const dict = I18N[currentLang] || I18N.az;
+      btnDriveBackupNow.disabled = true;
+      const origHtml = btnDriveBackupNow.innerHTML;
+      btnDriveBackupNow.textContent = dict.drive_backup_now_loading || '⏳ Saxlanılır...';
+
+      try {
+        const res = await authFetch('/api/backup/now', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          alert(dict.drive_backup_now_success || '✅ Məlumatlar Google Drive-a uğurla saxlanıldı!');
+          await checkDriveSyncStatus();
+        } else {
+          alert('❌ Xəta: ' + (data.error || 'Backup failed'));
+        }
+      } catch (err) {
+        alert('❌ Xəta: ' + err.message);
+      } finally {
+        btnDriveBackupNow.disabled = false;
+        btnDriveBackupNow.innerHTML = origHtml;
       }
     });
   }
