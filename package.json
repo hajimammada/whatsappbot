@@ -1,6 +1,6 @@
 {
   "name": "whatsappbot",
-  "version": "3.9.1",
+  "version": "3.10.0",
   "description": "24/7 Universal AI WhatsApp Agent - whatsappbot.hajimammad.com",
   "homepage": "https://whatsappbot.hajimammad.com",
   "main": "src/index.js",
@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node test/test_auth_recovery.js && node test/test_mongo_service.js"
+    "test": "node test/test_auth_recovery.js && node test/test_mongo_service.js && node test/test_omnichannel_inbox.js"
   },
   "keywords": [
     "whatsapp",

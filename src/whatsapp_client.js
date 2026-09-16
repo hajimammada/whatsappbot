@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { generateAIResponse, getAgentSettings } = require('./ai_engine');
-const { recordLead, migrateLeadLidToPhone } = require('./lead_manager');
+const { recordLead, migrateLeadLidToPhone, appendOperatorMessage } = require('./lead_manager');
 const pkg = require('../package.json');
 const mongoService = require('./mongo_service');
 
@@ -292,6 +292,68 @@ class WhatsAppClient {
       this.notifySubscribers('chat_status_updated', { ...payload, phone: mappedLid });
     }
     return { success: true, ...payload };
+  }
+
+  async sendManualMessage(phoneOrJid, text) {
+    if (!text || !text.trim()) {
+      throw new Error('Mesaj mətni boş ola bilməz');
+    }
+
+    const raw = String(phoneOrJid || '').trim();
+    const clean = raw.replace(/@.+/, '').replace(/\D/g, '');
+    
+    // Determine target remoteJid
+    let targetJid = raw.includes('@') ? raw : null;
+    if (!targetJid) {
+      const mappedLid = this.phoneToLidMap.get(clean);
+      if (mappedLid) {
+        targetJid = `${mappedLid}@lid`;
+      } else {
+        targetJid = `${clean}@s.whatsapp.net`;
+      }
+    }
+
+    let sentId = 'manual_' + Date.now();
+    if (this.socket) {
+      console.log(`📤 [Inbox] Sending manual operator reply to ${targetJid}: "${text}"`);
+      const sent = await this.socket.sendMessage(targetJid, { text: text.trim() });
+      if (sent?.key?.id) {
+        sentId = sent.key.id;
+        this.botSentMessageIds.add(sent.key.id);
+        if (this.botSentMessageIds.size > 2000) {
+          const first = this.botSentMessageIds.values().next().value;
+          this.botSentMessageIds.delete(first);
+        }
+      }
+    } else {
+      console.warn(`⚠️ [Inbox] WhatsApp socket not connected. Recorded message in lead history.`);
+    }
+
+    // Automatically pause bot for this chat so operator can converse uninterrupted
+    this.pauseBotForChat(clean || raw, null, true);
+
+    // Append to lead history
+    const lead = appendOperatorMessage(clean || raw, text.trim());
+
+    const outgoingLog = {
+      id: sentId,
+      to: clean || raw,
+      text: text.trim(),
+      direction: 'outgoing',
+      from: 'me',
+      isOperator: true,
+      timestamp: new Date().toISOString()
+    };
+    this.recentMessages.push(outgoingLog);
+    if (this.recentMessages.length > 100) this.recentMessages.shift();
+    this.notifySubscribers('new_message', outgoingLog);
+
+    return {
+      success: true,
+      sentId: sentId,
+      lead: lead,
+      outgoingLog: outgoingLog
+    };
   }
 
   isChatPaused(remoteJid) {

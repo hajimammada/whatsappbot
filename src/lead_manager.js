@@ -95,7 +95,7 @@ async function sendTelegramAlert(lead, viewingRequest) {
   });
 }
 
-async function recordLead(phoneNumber, rawMessage, aiAnalysis = null, contactName = null, jid = null) {
+async function recordLead(phoneNumber, rawMessage, aiAnalysis = null, contactName = null, jid = null, platform = 'whatsapp', platformId = null) {
   if (isChannelOrGroup(phoneNumber) || isChannelOrGroup(jid)) {
     return null;
   }
@@ -105,6 +105,7 @@ async function recordLead(phoneNumber, rawMessage, aiAnalysis = null, contactNam
   const cleanJid = jid || (phoneNumber && String(phoneNumber).includes('@') ? phoneNumber : null);
 
   let lead = leads.find(l => 
+    (platformId && l.platformId === platformId) ||
     (cleanPhone && l.phoneNumber === cleanPhone) ||
     (cleanPhone && l.lid === cleanPhone) ||
     (cleanJid && l.jid === cleanJid)
@@ -118,18 +119,27 @@ async function recordLead(phoneNumber, rawMessage, aiAnalysis = null, contactNam
   const msgEntry = {
     text: rawMessage,
     from: rawMessage.startsWith('Siz: ') ? 'me' : 'contact',
-    timestamp: now
+    timestamp: now,
+    platform: platform || 'whatsapp'
   };
 
   const isLid = cleanJid ? cleanJid.endsWith('@lid') : cleanPhone.length > 13;
 
   if (!lead) {
+    const defaultName = platform === 'instagram'
+      ? (contactName || 'Instagram İstifadəçisi')
+      : (platform === 'facebook'
+        ? (contactName || 'Facebook İstifadəçisi')
+        : (callerName || 'WhatsApp İstifadəçisi'));
+
     lead = {
       id: 'lead_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      platform: platform || 'whatsapp',
+      platformId: platformId || cleanPhone,
       phoneNumber: cleanPhone,
       jid: cleanJid,
       lid: isLid ? cleanPhone : null,
-      name: callerName || 'WhatsApp İstifadəçisi',
+      name: defaultName,
       status: isViewing ? 'viewing_requested' : 'inquired',
       interestLevel: isViewing ? 'high' : 'medium',
       firstContact: now,
@@ -142,6 +152,8 @@ async function recordLead(phoneNumber, rawMessage, aiAnalysis = null, contactNam
     };
     leads.unshift(lead);
   } else {
+    if (!lead.platform) lead.platform = platform || 'whatsapp';
+    if (platformId && !lead.platformId) lead.platformId = platformId;
     lead.lastContact = now;
     lead.lastMessage = rawMessage;
     lead.historyCount = (lead.historyCount || 1) + 1;
@@ -234,11 +246,42 @@ function updateLeadPhone(idOrOldPhone, newPhone) {
   return null;
 }
 
+function appendOperatorMessage(idOrPhone, text) {
+  if (!text || !text.trim()) return null;
+  const leads = getLeads();
+  const clean = String(idOrPhone || '').replace(/@.+/, '').replace(/\D/g, '');
+  const lead = leads.find(l => 
+    l.id === idOrPhone || 
+    (clean && l.phoneNumber === clean) || 
+    (clean && l.lid === clean) ||
+    (l.platformId && l.platformId === idOrPhone)
+  );
+
+  if (lead) {
+    const now = new Date().toISOString();
+    lead.lastContact = now;
+    lead.lastMessage = 'Siz: ' + text.trim();
+    lead.messages = lead.messages || [];
+    lead.messages.push({
+      text: 'Siz: ' + text.trim(),
+      from: 'me',
+      operator: true,
+      timestamp: now,
+      platform: lead.platform || 'whatsapp'
+    });
+    if (lead.messages.length > 50) lead.messages.shift();
+    saveLeadsList(leads);
+    return lead;
+  }
+  return null;
+}
+
 module.exports = {
   getLeads,
   recordLead,
   updateLeadStatus,
   migrateLeadLidToPhone,
   updateLeadPhone,
+  appendOperatorMessage,
   sendTelegramAlert
 };

@@ -76,7 +76,11 @@ document.addEventListener('DOMContentLoaded', () => {
       mongo_sync_connected: "MongoDB: Aktiv 🟢",
       mongo_sync_unconfigured: "MongoDB: Qoşulmayıb ⚠️",
       mongo_sync_now_success: "✅ Məlumatlar MongoDB Atlas-a uğurla sinxron edildi!",
-      mongo_sync_now_loading: "⏳ MongoDB Atlas-a sinxron edilir..."
+      mongo_sync_now_loading: "⏳ MongoDB Atlas-a sinxron edilir...",
+      inbox_select_prompt: "Söhbət seçin",
+      inbox_select_sub: "Sol siyahıdan bir alıcı seçərək mesajlaşmanı canlı izləyə və birbaşa cavab yaza bilərsiniz.",
+      inbox_send_btn: "Göndər 🚀",
+      inbox_reply_ph: "Mesajınızı bura yazın... (Enter göndərir, Shift+Enter yeni sətir)"
     },
     ru: {
       brand_title: "whatsappbot.hajimammad.com",
@@ -148,7 +152,11 @@ document.addEventListener('DOMContentLoaded', () => {
       mongo_sync_connected: "MongoDB: Активен 🟢",
       mongo_sync_unconfigured: "MongoDB: Не подключен ⚠️",
       mongo_sync_now_success: "✅ Данные успешно синхронизированы с MongoDB Atlas!",
-      mongo_sync_now_loading: "⏳ Синхронизация с MongoDB Atlas..."
+      mongo_sync_now_loading: "⏳ Синхронизация с MongoDB Atlas...",
+      inbox_select_prompt: "Выберите диалог",
+      inbox_select_sub: "Выберите контакт из списка слева, чтобы просмотреть переписку и ответить напрямую.",
+      inbox_send_btn: "Отправить 🚀",
+      inbox_reply_ph: "Введите сообщение... (Enter для отправки, Shift+Enter новая строка)"
     },
     en: {
       brand_title: "whatsappbot.hajimammad.com",
@@ -220,7 +228,11 @@ document.addEventListener('DOMContentLoaded', () => {
       mongo_sync_connected: "MongoDB: Active 🟢",
       mongo_sync_unconfigured: "MongoDB: Offline ⚠️",
       mongo_sync_now_success: "✅ Data successfully synced to MongoDB Atlas!",
-      mongo_sync_now_loading: "⏳ Syncing to MongoDB Atlas..."
+      mongo_sync_now_loading: "⏳ Syncing to MongoDB Atlas...",
+      inbox_select_prompt: "Select a conversation",
+      inbox_select_sub: "Choose a contact from the left list to view live history and reply directly.",
+      inbox_send_btn: "Send 🚀",
+      inbox_reply_ph: "Type your message... (Enter to send, Shift+Enter for new line)"
     }
   };
 
@@ -339,6 +351,34 @@ document.addEventListener('DOMContentLoaded', () => {
   const leadsTbody = document.getElementById('leads-tbody');
   const leadsBadgeCount = document.getElementById('leads-count');
   const btnRefreshLeads = document.getElementById('btn-refresh-leads');
+
+  // Omnichannel Live Chat Inbox Elements
+  const btnViewChat = document.getElementById('btn-view-chat');
+  const btnViewTable = document.getElementById('btn-view-table');
+  const inboxContainer = document.getElementById('inbox-container');
+  const leadsTableWrapper = document.getElementById('leads-table-wrapper');
+  const inboxSearchInput = document.getElementById('inbox-search-input');
+  const inboxChannelTabs = document.querySelectorAll('.channel-tab');
+  const inboxConvList = document.getElementById('inbox-conv-list');
+  const inboxNoSelected = document.getElementById('inbox-no-selected');
+  const inboxActiveChat = document.getElementById('inbox-active-chat');
+  const activeChatAvatar = document.getElementById('active-chat-avatar');
+  const activeChatName = document.getElementById('active-chat-name');
+  const activeChatPlatformBadge = document.getElementById('active-chat-platform-badge');
+  const activeChatPhone = document.getElementById('active-chat-phone');
+  const btnEditActivePhone = document.getElementById('btn-edit-active-phone');
+  const activeChatBotControl = document.getElementById('active-chat-bot-control');
+  const activeChatExternalLink = document.getElementById('active-chat-external-link');
+  const inboxMessagesStream = document.getElementById('inbox-messages-stream');
+  const inboxReplyForm = document.getElementById('inbox-reply-form');
+  const inboxReplyInput = document.getElementById('inbox-reply-input');
+  const btnInboxSend = document.getElementById('btn-inbox-send');
+
+  // Inbox State Variables
+  let currentLeads = [];
+  let selectedInboxLeadId = null;
+  let activeChannelFilter = 'all';
+  let inboxSearchQuery = '';
 
   const btnNewDoc = document.getElementById('btn-new-doc');
   const btnSaveDoc = document.getElementById('btn-save-doc');
@@ -679,6 +719,7 @@ document.addEventListener('DOMContentLoaded', () => {
       renderQR(data.qrCodeDataUrl);
     } else if (type === 'new_message') {
       appendMessageToFeed(data);
+      if (currentAuthToken) loadLeads();
     } else if (type === 'leads_updated') {
       if (currentAuthToken) loadLeads();
     } else if (type === 'documents_updated') {
@@ -1044,7 +1085,9 @@ document.addEventListener('DOMContentLoaded', () => {
       ]);
       const leads = await leadsRes.json();
       chatStatuses = await statusRes.json();
-      renderLeadsTable(leads);
+      currentLeads = Array.isArray(leads) ? leads : [];
+      renderLeadsTable(currentLeads);
+      renderInboxConversations();
     } catch (err) {
       console.error('Error fetching leads:', err);
     }
@@ -1065,7 +1108,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const dict = I18N[currentLang];
 
     if (!leads || leads.length === 0) {
-      leadsTbody.innerHTML = `<tr><td colspan="8" class="text-center" style="padding: 24px; color: var(--text-muted)">${dict.no_leads}</td></tr>`;
+      leadsTbody.innerHTML = `<tr><td colspan="9" class="text-center" style="padding: 24px; color: var(--text-muted)">${dict.no_leads}</td></tr>`;
       return;
     }
 
@@ -1090,7 +1133,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const remainingMins = chatStatus?.remainingMinutes;
       const remainingFormatted = remainingMins ? formatRemainingTime(remainingMins) : '';
 
-      const targetPhone = l.phoneNumber || l.lid;
+      const targetPhone = l.phoneNumber || l.lid || l.platformId || '';
       const badgeText = (isManual || !remainingMins)
         ? dict.bot_paused
         : `${dict.bot_paused} (${remainingFormatted})`;
@@ -1110,14 +1153,18 @@ document.addEventListener('DOMContentLoaded', () => {
         : '';
 
       const isLikelyLid = (l.lid && l.lid === l.phoneNumber) || (l.phoneNumber && l.phoneNumber.length >= 14 && !l.phoneNumber.startsWith('994') && !l.phoneNumber.startsWith('90') && !l.phoneNumber.startsWith('7') && !l.phoneNumber.startsWith('1'));
+      const plat = getPlatformMeta(l.platform);
 
       return `
         <tr>
           <td>
             <strong>${escapeHtml(l.name || 'User')}</strong>${msgCountBadge}<br>
-            <span style="font-family: var(--font-mono); color: var(--accent-blue);">+${escapeHtml(l.phoneNumber)}</span>
+            <span style="font-family: var(--font-mono); color: var(--accent-blue);">${escapeHtml(targetPhone ? (targetPhone.startsWith('+') ? targetPhone : '+' + targetPhone) : '')}</span>
             ${isLikelyLid ? '<span class="badge badge-warning" style="font-size: 9px; padding: 1px 4px; margin-left: 3px;" title="WhatsApp Daxili İdentifikatoru (LID)">ID</span>' : ''}
             <button class="btn btn-link btn-xs btn-edit-lead-phone" data-id="${l.id}" data-phone="${escapeHtml(l.phoneNumber)}" title="Telefon nömrəsini düzəlt / Daxil et" style="cursor: pointer; padding: 0 4px; font-size: 12px; text-decoration: none; border: none; background: transparent;">✏️</button>
+          </td>
+          <td>
+            <span class="badge-platform-sm">${plat.badge}</span>
           </td>
           <td>
             <span class="badge-lead ${isViewing ? 'badge-status-viewing' : ''}">
@@ -1136,7 +1183,9 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
           <td style="font-size: 11px; color: var(--text-muted);">${dateFormatted}</td>
           <td>
-            <a href="https://wa.me/${l.phoneNumber}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration: none;">WhatsApp</a>
+            ${(l.platform || 'whatsapp') === 'whatsapp'
+              ? `<a href="https://wa.me/${l.phoneNumber}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration: none;">WhatsApp</a>`
+              : `<button type="button" class="btn btn-secondary btn-sm btn-open-inbox-lead" data-id="${l.id}">💬 Inbox</button>`}
           </td>
         </tr>
       `;
@@ -1244,6 +1293,352 @@ document.addEventListener('DOMContentLoaded', () => {
           btn.textContent = '✏️';
         }
       });
+    });
+
+    // Open Inbox from Table handler
+    document.querySelectorAll('.btn-open-inbox-lead').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const leadId = btn.getAttribute('data-id');
+        if (btnViewChat) btnViewChat.click();
+        selectConversation(leadId);
+      });
+    });
+  }
+
+  // -----------------------------------------------------------------
+  // 6b. Omnichannel Live Chat Inbox
+  // -----------------------------------------------------------------
+  function getPlatformMeta(platform) {
+    switch ((platform || '').toLowerCase()) {
+      case 'instagram':
+        return { name: 'Instagram', badge: '📸 Instagram', icon: '📸', color: '#e1306c' };
+      case 'facebook':
+        return { name: 'Facebook', badge: '🔵 Facebook', icon: '🔵', color: '#1877f2' };
+      case 'whatsapp':
+      default:
+        return { name: 'WhatsApp', badge: '🟢 WhatsApp', icon: '🟢', color: '#25d366' };
+    }
+  }
+
+  function formatRelativeTime(dateStr) {
+    try {
+      const d = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now - d;
+      const diffMins = Math.floor(diffMs / 60000);
+      if (diffMins < 1) return currentLang === 'en' ? 'now' : (currentLang === 'ru' ? 'сейчас' : 'indi');
+      if (diffMins < 60) return `${diffMins}m`;
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours}h`;
+      return `${Math.floor(diffHours / 24)}d`;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function renderInboxConversations() {
+    if (!inboxConvList) return;
+
+    let filtered = currentLeads || [];
+    if (activeChannelFilter && activeChannelFilter !== 'all') {
+      filtered = filtered.filter(l => (l.platform || 'whatsapp').toLowerCase() === activeChannelFilter);
+    }
+
+    if (inboxSearchQuery) {
+      const q = inboxSearchQuery.toLowerCase();
+      filtered = filtered.filter(l => 
+        (l.name && l.name.toLowerCase().includes(q)) ||
+        (l.phoneNumber && l.phoneNumber.toLowerCase().includes(q)) ||
+        (l.lastMessage && l.lastMessage.toLowerCase().includes(q))
+      );
+    }
+
+    if (filtered.length === 0) {
+      inboxConvList.innerHTML = `<div class="empty-inbox-placeholder">${currentLang === 'en' ? 'No conversations found' : (currentLang === 'ru' ? 'Диалоги не найдены' : 'Heç bir söhbət tapılmadı')}</div>`;
+      if (!selectedInboxLeadId) {
+        if (inboxNoSelected) inboxNoSelected.classList.remove('hidden');
+        if (inboxActiveChat) inboxActiveChat.classList.add('hidden');
+      }
+      return;
+    }
+
+    // If no lead selected yet or current selection is not in list, auto-select first
+    if (!selectedInboxLeadId || !filtered.some(l => l.id === selectedInboxLeadId)) {
+      selectedInboxLeadId = filtered[0].id;
+    }
+
+    inboxConvList.innerHTML = filtered.map(l => {
+      const isSelected = l.id === selectedInboxLeadId;
+      const plat = getPlatformMeta(l.platform);
+      const chatStatus = chatStatuses[l.phoneNumber] || (l.lid && chatStatuses[l.lid]);
+      const isPaused = chatStatus && chatStatus.isPaused;
+      const initial = (l.name && l.name.charAt(0)) ? l.name.charAt(0).toUpperCase() : '👤';
+      const timeStr = l.lastContact ? formatRelativeTime(l.lastContact) : '';
+
+      return `
+        <div class="inbox-conv-item ${isSelected ? 'active' : ''}" data-lead-id="${l.id}">
+          <div class="conv-avatar-wrapper">
+            <div class="conv-avatar">${escapeHtml(initial)}</div>
+            <span class="conv-platform-badge">${plat.icon}</span>
+          </div>
+          <div class="conv-content">
+            <div class="conv-top-row">
+              <span class="conv-name" title="${escapeHtml(l.name || 'Alıcı')}">${escapeHtml(l.name || 'Alıcı')}</span>
+              <span class="conv-time">${timeStr}</span>
+            </div>
+            <div class="conv-bot-row">
+              <span class="conv-preview" title="${escapeHtml(l.lastMessage || '')}">${escapeHtml(l.lastMessage || '...')}</span>
+              <span class="conv-bot-pill ${isPaused ? 'conv-bot-paused' : 'conv-bot-active'}">
+                ${isPaused ? '⏸️' : '🤖'}
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    inboxConvList.querySelectorAll('.inbox-conv-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const leadId = item.getAttribute('data-lead-id');
+        selectConversation(leadId);
+      });
+    });
+
+    if (selectedInboxLeadId) {
+      renderActiveChat();
+    }
+  }
+
+  function selectConversation(leadId) {
+    selectedInboxLeadId = leadId;
+    renderInboxConversations();
+    renderActiveChat();
+    if (inboxReplyInput) {
+      inboxReplyInput.focus();
+    }
+  }
+
+  function renderActiveChat() {
+    const lead = currentLeads.find(l => l.id === selectedInboxLeadId);
+    if (!lead) {
+      if (inboxNoSelected) inboxNoSelected.classList.remove('hidden');
+      if (inboxActiveChat) inboxActiveChat.classList.add('hidden');
+      return;
+    }
+
+    if (inboxNoSelected) inboxNoSelected.classList.add('hidden');
+    if (inboxActiveChat) inboxActiveChat.classList.remove('hidden');
+
+    const plat = getPlatformMeta(lead.platform);
+    const targetPhone = lead.phoneNumber || lead.lid || lead.platformId || '';
+
+    if (activeChatAvatar) activeChatAvatar.textContent = (lead.name && lead.name.charAt(0)) ? lead.name.charAt(0).toUpperCase() : '👤';
+    if (activeChatName) activeChatName.textContent = lead.name || 'Alıcı';
+    if (activeChatPlatformBadge) activeChatPlatformBadge.textContent = plat.badge;
+    if (activeChatPhone) activeChatPhone.textContent = targetPhone ? (targetPhone.startsWith('+') ? targetPhone : `+${targetPhone}`) : '';
+
+    if (btnEditActivePhone) {
+      btnEditActivePhone.setAttribute('data-id', lead.id);
+      btnEditActivePhone.setAttribute('data-phone', lead.phoneNumber || '');
+    }
+
+    if (activeChatExternalLink) {
+      if ((lead.platform || 'whatsapp') === 'whatsapp') {
+        activeChatExternalLink.href = `https://wa.me/${lead.phoneNumber}`;
+        activeChatExternalLink.style.display = 'inline-flex';
+      } else {
+        activeChatExternalLink.style.display = 'none';
+      }
+    }
+
+    // Bot control button
+    const chatStatus = chatStatuses[lead.phoneNumber] || (lead.lid && chatStatuses[lead.lid]);
+    const isPaused = chatStatus && chatStatus.isPaused;
+    const dict = I18N[currentLang];
+
+    if (activeChatBotControl) {
+      activeChatBotControl.innerHTML = isPaused
+        ? `<button type="button" class="btn btn-primary btn-xs" id="btn-inbox-resume-bot">🤖 ${dict.btn_resume}</button>`
+        : `<button type="button" class="btn btn-secondary btn-xs" id="btn-inbox-pause-bot">⏸️ ${dict.btn_pause}</button>`;
+
+      const btnResume = document.getElementById('btn-inbox-resume-bot');
+      if (btnResume) {
+        btnResume.addEventListener('click', async () => {
+          btnResume.disabled = true;
+          btnResume.textContent = '...';
+          await authFetch(`/api/chat/${encodeURIComponent(targetPhone)}/resume`, { method: 'POST' });
+          if (chatStatuses[targetPhone]) chatStatuses[targetPhone] = { isPaused: false, remainingMinutes: 0 };
+          await loadLeads();
+        });
+      }
+      const btnPause = document.getElementById('btn-inbox-pause-bot');
+      if (btnPause) {
+        btnPause.addEventListener('click', async () => {
+          btnPause.disabled = true;
+          btnPause.textContent = '...';
+          await authFetch(`/api/chat/${encodeURIComponent(targetPhone)}/pause`, {
+            method: 'POST',
+            body: JSON.stringify({ isManual: true })
+          });
+          if (!chatStatuses[targetPhone]) chatStatuses[targetPhone] = {};
+          chatStatuses[targetPhone].isPaused = true;
+          chatStatuses[targetPhone].isManual = true;
+          await loadLeads();
+        });
+      }
+    }
+
+    // Render Messages Stream
+    if (inboxMessagesStream) {
+      const messages = lead.messages || [];
+      if (messages.length === 0) {
+        inboxMessagesStream.innerHTML = `<div class="empty-inbox-placeholder">${currentLang === 'en' ? 'No messages yet' : (currentLang === 'ru' ? 'Нет сообщений' : 'Hələ heç bir mesaj yoxdur')}</div>`;
+      } else {
+        inboxMessagesStream.innerHTML = messages.map(m => {
+          const isMe = m.from === 'me';
+          const isOperator = m.operator || (isMe && m.text && m.text.startsWith('Siz: '));
+          const cleanText = m.text ? m.text.replace(/^Siz:\s*/, '') : '';
+          const bubbleClass = !isMe ? 'incoming' : (isOperator ? 'outgoing operator' : 'outgoing bot');
+          const senderLabel = !isMe 
+            ? escapeHtml(lead.name || 'Müştəri') 
+            : (isOperator ? (currentLang === 'en' ? '👤 You (Operator)' : '👤 Siz (Operator)') : '🤖 AI Bot');
+          const time = m.timestamp ? formatDateTime(m.timestamp, currentLang) : '';
+
+          return `
+            <div class="chat-bubble ${bubbleClass}">
+              <span class="bubble-sender-badge">${senderLabel}</span>
+              <div class="bubble-body">${escapeHtml(cleanText)}</div>
+              <div class="chat-bubble-meta">${time}</div>
+            </div>
+          `;
+        }).join('');
+
+        inboxMessagesStream.scrollTop = inboxMessagesStream.scrollHeight;
+      }
+    }
+  }
+
+  async function sendOperatorReply() {
+    if (!selectedInboxLeadId || !inboxReplyInput) return;
+    const text = inboxReplyInput.value.trim();
+    if (!text) return;
+
+    const lead = currentLeads.find(l => l.id === selectedInboxLeadId);
+    if (!lead) return;
+
+    btnInboxSend.disabled = true;
+    const origText = btnInboxSend.innerHTML;
+    btnInboxSend.innerHTML = '⏳ ...';
+
+    try {
+      const payload = {
+        leadId: lead.id,
+        text: text,
+        platform: lead.platform || 'whatsapp',
+        targetId: lead.phoneNumber || lead.lid || lead.platformId
+      };
+
+      const res = await authFetch('/api/inbox/reply', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Mesaj göndərilə bilmədi');
+      }
+
+      inboxReplyInput.value = '';
+
+      // Optimistically append message to local lead history
+      lead.messages = lead.messages || [];
+      lead.messages.push({
+        text: 'Siz: ' + text,
+        from: 'me',
+        operator: true,
+        timestamp: new Date().toISOString(),
+        platform: lead.platform || 'whatsapp'
+      });
+      lead.lastMessage = 'Siz: ' + text;
+      lead.lastContact = new Date().toISOString();
+
+      renderActiveChat();
+      renderInboxConversations();
+
+      loadLeads();
+    } catch (err) {
+      alert((currentLang === 'en' ? 'Failed to send message: ' : 'Mesaj göndərilə bilmədi: ') + err.message);
+    } finally {
+      btnInboxSend.disabled = false;
+      btnInboxSend.innerHTML = origText;
+      if (inboxReplyInput) inboxReplyInput.focus();
+    }
+  }
+
+  if (btnInboxSend) {
+    btnInboxSend.addEventListener('click', sendOperatorReply);
+  }
+
+  if (inboxReplyInput) {
+    inboxReplyInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendOperatorReply();
+      }
+    });
+  }
+
+  if (inboxSearchInput) {
+    inboxSearchInput.addEventListener('input', (e) => {
+      inboxSearchQuery = e.target.value.trim();
+      renderInboxConversations();
+    });
+  }
+
+  inboxChannelTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      inboxChannelTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeChannelFilter = tab.getAttribute('data-channel') || 'all';
+      renderInboxConversations();
+    });
+  });
+
+  if (btnViewChat && btnViewTable) {
+    btnViewChat.addEventListener('click', () => {
+      btnViewChat.classList.add('active');
+      btnViewTable.classList.remove('active');
+      if (inboxContainer) inboxContainer.classList.remove('hidden');
+      if (leadsTableWrapper) leadsTableWrapper.classList.add('hidden');
+    });
+
+    btnViewTable.addEventListener('click', () => {
+      btnViewTable.classList.add('active');
+      btnViewChat.classList.remove('active');
+      if (inboxContainer) inboxContainer.classList.add('hidden');
+      if (leadsTableWrapper) leadsTableWrapper.classList.remove('hidden');
+    });
+  }
+
+  if (btnEditActivePhone) {
+    btnEditActivePhone.addEventListener('click', () => {
+      const leadId = btnEditActivePhone.getAttribute('data-id');
+      const lead = currentLeads.find(l => l.id === leadId);
+      if (!lead) return;
+      const currentPhone = lead.phoneNumber || '';
+      const promptText = currentLang === 'en'
+        ? 'Enter real international phone number (e.g. 994501234567):'
+        : 'Müştərinin real beynəlxalq telefon nömrəsini daxil edin (məs: 994501234567):';
+      const input = prompt(promptText, currentPhone);
+      if (!input || !input.trim()) return;
+      const cleanPhone = input.trim().replace(/\D/g, '');
+      if (cleanPhone.length < 8) return;
+
+      authFetch(`/api/leads/${encodeURIComponent(leadId)}/phone`, {
+        method: 'POST',
+        body: JSON.stringify({ phoneNumber: cleanPhone })
+      }).then(() => loadLeads()).catch(err => alert(err.message));
     });
   }
 

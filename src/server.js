@@ -6,9 +6,10 @@ const { execSync } = require('child_process');
 
 const waClient = require('./whatsapp_client');
 const userManager = require('./user_manager');
-const { getLeads, updateLeadStatus, updateLeadPhone } = require('./lead_manager');
+const { getLeads, updateLeadStatus, updateLeadPhone, appendOperatorMessage } = require('./lead_manager');
 const { generateAIResponse, getAgentSettings, validateGeminiApiKey } = require('./ai_engine');
 const mongoService = require('./mongo_service');
+const metaService = require('./meta_service');
 
 function getAppVersion() {
   if (process.env.APP_VERSION) {
@@ -40,7 +41,7 @@ function getAppVersion() {
     // Git command not available
   }
 
-  return 'v3.9.1';
+  return 'v3.10.0';
 }
 
 function createServer() {
@@ -131,6 +132,11 @@ function createServer() {
 
   // Subscribe to WhatsApp client events
   waClient.onEvent((eventType, data) => {
+    broadcastSSE(eventType, data);
+  });
+
+  // Subscribe to Meta service events (Instagram & Facebook)
+  metaService.onEvent((eventType, data) => {
     broadcastSSE(eventType, data);
   });
 
@@ -227,7 +233,8 @@ function createServer() {
     res.json({
       ...waClient.getStatus(),
       version: getAppVersion(),
-      geminiApiKey: req.user.apiKey || ''
+      geminiApiKey: req.user.apiKey || '',
+      meta: metaService.getStatus()
     });
   });
 
@@ -453,6 +460,63 @@ function createServer() {
       res.json({ success: true, lead: updated });
     } else {
       res.status(404).json({ error: 'Lead tapılmadı' });
+    }
+  });
+
+  // Meta Webhook Verification (GET) - Handshake for Meta for Developers
+  app.get('/api/webhook/meta', (req, res) => {
+    const challenge = metaService.verifyWebhook(req.query);
+    if (challenge) {
+      res.status(200).send(challenge);
+    } else {
+      res.status(403).send('Forbidden');
+    }
+  });
+
+  // Meta Webhook Ingestion (POST) - Instagram Direct & Facebook Messenger
+  app.post('/api/webhook/meta', async (req, res) => {
+    // Meta requires an immediate HTTP 200 OK
+    res.status(200).send('EVENT_RECEIVED');
+    try {
+      await metaService.handleIncomingWebhook(req.body);
+    } catch (err) {
+      console.error('Error handling Meta webhook event:', err);
+    }
+  });
+
+  // Unified Omnichannel Inbox Manual Reply Endpoint (Authenticated)
+  app.post('/api/inbox/reply', requireAuth, async (req, res) => {
+    try {
+      const { leadId, text, platform, targetId } = req.body;
+      if (!text || !text.trim()) {
+        return res.status(400).json({ error: 'Mesaj mətni boş ola bilməz' });
+      }
+
+      const leads = getLeads();
+      const lead = leads.find(l => 
+        l.id === leadId || 
+        (targetId && (l.phoneNumber === targetId || l.platformId === targetId || l.lid === targetId))
+      );
+      const targetPlatform = platform || (lead && lead.platform) || 'whatsapp';
+      const destination = targetId || (lead && (lead.phoneNumber || lead.platformId || lead.lid));
+
+      if (!destination) {
+        return res.status(400).json({ error: 'Alıcı tapılmadı' });
+      }
+
+      if (targetPlatform === 'instagram' || targetPlatform === 'facebook') {
+        const result = await metaService.sendMessage(destination, text.trim(), targetPlatform);
+        broadcastSSE('leads_updated', {});
+        return res.json({ success: true, platform: targetPlatform, result });
+      } else {
+        // WhatsApp
+        const result = await waClient.sendManualMessage(destination, text.trim());
+        broadcastSSE('leads_updated', {});
+        return res.json({ success: true, platform: 'whatsapp', result });
+      }
+    } catch (err) {
+      console.error('Error in /api/inbox/reply:', err);
+      res.status(500).json({ error: err.message });
     }
   });
 
